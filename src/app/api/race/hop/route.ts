@@ -1,9 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { supabase } from "@/lib/supabase/client";
+import { createAuthedClient } from "@/lib/supabase/server";
 
 type HopBody = {
   raceId?: string;
-  guestId?: string;
   fromTitle?: string;
   toTitle?: string;
 };
@@ -13,10 +12,18 @@ function sameArticle(a: string, b: string) {
 }
 
 export async function POST(request: NextRequest) {
-  const { raceId, guestId, fromTitle, toTitle } = (await request.json()) as HopBody;
+  const supabase = createAuthedClient(request.headers.get("authorization"));
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) {
+    return NextResponse.json({ error: "Not signed in" }, { status: 401 });
+  }
 
-  if (!raceId || !guestId || !fromTitle || !toTitle) {
-    return NextResponse.json({ error: "Missing raceId, guestId, fromTitle, or toTitle" }, { status: 400 });
+  const { raceId, fromTitle, toTitle } = (await request.json()) as HopBody;
+
+  if (!raceId || !fromTitle || !toTitle) {
+    return NextResponse.json({ error: "Missing raceId, fromTitle, or toTitle" }, { status: 400 });
   }
 
   const { data: race, error: raceError } = await supabase
@@ -33,7 +40,7 @@ export async function POST(request: NextRequest) {
     .from("race_participants")
     .select("hop_count, status")
     .eq("race_id", raceId)
-    .eq("guest_id", guestId)
+    .eq("user_id", user.id)
     .single();
 
   if (participantError || !participant) {
@@ -49,7 +56,7 @@ export async function POST(request: NextRequest) {
 
   await supabase.from("race_hops").insert({
     race_id: raceId,
-    guest_id: guestId,
+    user_id: user.id,
     from_title: fromTitle,
     to_title: toTitle,
     hop_index: nextHopCount,
@@ -59,7 +66,7 @@ export async function POST(request: NextRequest) {
   if (finished) {
     const { count } = await supabase
       .from("race_participants")
-      .select("guest_id", { count: "exact", head: true })
+      .select("user_id", { count: "exact", head: true })
       .eq("race_id", raceId)
       .eq("status", "finished");
     finishRank = (count ?? 0) + 1;
@@ -75,7 +82,7 @@ export async function POST(request: NextRequest) {
         : {}),
     })
     .eq("race_id", raceId)
-    .eq("guest_id", guestId);
+    .eq("user_id", user.id);
 
   if (updateError) {
     return NextResponse.json({ error: updateError.message }, { status: 500 });

@@ -3,10 +3,10 @@
 import { useEffect, useState } from "react";
 import ArticleView from "@/components/ArticleView";
 import { supabase } from "@/lib/supabase/client";
-import { getGuestId } from "@/lib/guest";
+import { getAuthHeader } from "@/lib/auth/session";
 
 type Participant = {
-  guest_id: string;
+  user_id: string;
   display_name: string;
   status: "racing" | "finished" | "surrendered";
   hop_count: number;
@@ -39,7 +39,6 @@ export default function RaceView({
   startedAt,
   initialParticipants,
 }: RaceViewProps) {
-  const guestId = getGuestId();
   const [currentTitle, setCurrentTitle] = useState(startTitle);
   const [articleTitle, setArticleTitle] = useState(startTitle);
   const [articleHtml, setArticleHtml] = useState("");
@@ -72,7 +71,7 @@ export default function RaceView({
         (payload) => {
           const updated = payload.new as Participant;
           setParticipants((prev) =>
-            prev.map((p) => (p.guest_id === updated.guest_id ? { ...p, ...updated } : p)),
+            prev.map((p) => (p.user_id === updated.user_id ? { ...p, ...updated } : p)),
           );
         },
       )
@@ -107,8 +106,8 @@ export default function RaceView({
     try {
       const res = await fetch("/api/race/hop", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ raceId, guestId, fromTitle, toTitle }),
+        headers: { "Content-Type": "application/json", Authorization: await getAuthHeader() },
+        body: JSON.stringify({ raceId, fromTitle, toTitle }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Failed to record hop");
@@ -165,7 +164,7 @@ export default function RaceView({
             <div className="mt-3 flex flex-col gap-2">
               {sortParticipants(participants).map((p, i) => (
                 <div
-                  key={p.guest_id}
+                  key={p.user_id}
                   className="flex items-center justify-between rounded-xl bg-brand-cream px-3 py-2 font-body text-sm text-brand-navy"
                 >
                   <span className="flex items-center gap-1.5">

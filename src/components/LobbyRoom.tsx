@@ -1,13 +1,14 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { RealtimeChannel } from "@supabase/supabase-js";
 import { supabase } from "@/lib/supabase/client";
-import { getGuestId, getGuestName } from "@/lib/guest";
+import { ensureUserId, getAuthHeader } from "@/lib/auth/session";
+import { getDisplayName } from "@/lib/display-name";
 
 type Member = {
-  guestId: string;
+  userId: string;
   displayName: string;
   isHost: boolean;
 };
@@ -18,25 +19,45 @@ type LobbyRoomProps = {
   maxPlayers: number;
 };
 
-// Hardcoded for M3 — difficulty tiers and category decks (M5) will replace
-// this with a real pick instead of one fixed pair.
+// Hardcoded for M3/M4 — difficulty tiers and category decks (M5) will
+// replace this with a real pick instead of one fixed pair.
 const RACE_START_TITLE = "Jordan";
 const RACE_DESTINATION_TITLE = "Albert Einstein";
 
 export default function LobbyRoom({ lobbyId, joinCode, maxPlayers }: LobbyRoomProps) {
   const router = useRouter();
+  const [userId, setUserId] = useState<string | null>(null);
   const [members, setMembers] = useState<Member[]>([]);
   const [starting, setStarting] = useState(false);
   const [error, setError] = useState("");
   const channelRef = useRef<RealtimeChannel | null>(null);
 
-  const guestId = getGuestId();
-  const self = members.find((m) => m.guestId === guestId);
+  const self = members.find((m) => m.userId === userId);
   const isHost = self?.isHost ?? false;
 
   useEffect(() => {
+    ensureUserId().then(setUserId);
+  }, []);
+
+  const joinRaceAsParticipant = useCallback(
+    async (raceId: string, startTitle: string) => {
+      if (!userId) return;
+      await supabase.from("race_participants").insert({
+        race_id: raceId,
+        user_id: userId,
+        display_name: getDisplayName(),
+        current_title: startTitle,
+      });
+      router.push(`/race/${raceId}`);
+    },
+    [userId, router],
+  );
+
+  useEffect(() => {
+    if (!userId) return;
+
     const channel = supabase.channel(`lobby:${lobbyId}`, {
-      config: { presence: { key: guestId } },
+      config: { presence: { key: userId } },
     });
     channelRef.current = channel;
 
@@ -45,11 +66,11 @@ export default function LobbyRoom({ lobbyId, joinCode, maxPlayers }: LobbyRoomPr
         const state = channel.presenceState<Member>();
         const list = Object.values(state)
           .flat()
-          .map((m) => ({ guestId: m.guestId, displayName: m.displayName, isHost: m.isHost }));
+          .map((m) => ({ userId: m.userId, displayName: m.displayName, isHost: m.isHost }));
         setMembers(list);
       })
       .on("broadcast", { event: "race_start" }, ({ payload }) => {
-        router.push(`/race/${payload.raceId}`);
+        joinRaceAsParticipant(payload.raceId, payload.startTitle);
       })
       .subscribe(async (status) => {
         if (status !== "SUBSCRIBED") return;
@@ -61,12 +82,12 @@ export default function LobbyRoom({ lobbyId, joinCode, maxPlayers }: LobbyRoomPr
           .from("lobby_members")
           .select("is_host")
           .eq("lobby_id", lobbyId)
-          .eq("guest_id", guestId)
+          .eq("user_id", userId)
           .single();
 
         await channel.track({
-          guestId,
-          displayName: getGuestName(),
+          userId,
+          displayName: getDisplayName(),
           isHost: data?.is_host ?? false,
         });
       });
@@ -74,7 +95,7 @@ export default function LobbyRoom({ lobbyId, joinCode, maxPlayers }: LobbyRoomPr
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [lobbyId, guestId, router]);
+  }, [lobbyId, userId, joinRaceAsParticipant]);
 
   async function handleStart() {
     setError("");
@@ -82,12 +103,11 @@ export default function LobbyRoom({ lobbyId, joinCode, maxPlayers }: LobbyRoomPr
     try {
       const res = await fetch("/api/race/start", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", Authorization: await getAuthHeader() },
         body: JSON.stringify({
           lobbyId,
           startTitle: RACE_START_TITLE,
           destinationTitle: RACE_DESTINATION_TITLE,
-          members,
         }),
       });
       const data = await res.json();
@@ -96,9 +116,9 @@ export default function LobbyRoom({ lobbyId, joinCode, maxPlayers }: LobbyRoomPr
       await channelRef.current?.send({
         type: "broadcast",
         event: "race_start",
-        payload: { raceId: data.raceId },
+        payload: { raceId: data.raceId, startTitle: RACE_START_TITLE },
       });
-      router.push(`/race/${data.raceId}`);
+      await joinRaceAsParticipant(data.raceId, RACE_START_TITLE);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to start race");
       setStarting(false);
@@ -130,7 +150,7 @@ export default function LobbyRoom({ lobbyId, joinCode, maxPlayers }: LobbyRoomPr
             )}
             {members.map((m) => (
               <span
-                key={m.guestId}
+                key={m.userId}
                 className="flex items-center gap-1.5 rounded-full bg-brand-navy px-3 py-1.5 font-body text-sm font-semibold text-white"
               >
                 {m.isHost && <span>👑</span>}

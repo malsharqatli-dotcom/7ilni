@@ -15,7 +15,7 @@ export default async function RacePage(props: PageProps<"/race/[id]">) {
 
   const { data: participants } = await supabase
     .from("race_participants")
-    .select("guest_id, display_name, status, hop_count, finish_rank")
+    .select("user_id, display_name, status, hop_count, finish_rank")
     .eq("race_id", id);
 
   return (

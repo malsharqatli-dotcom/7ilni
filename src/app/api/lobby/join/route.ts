@@ -1,16 +1,22 @@
 import { NextRequest, NextResponse } from "next/server";
-import { supabase } from "@/lib/supabase/client";
+import { createAuthedClient } from "@/lib/supabase/server";
 
 export async function POST(request: NextRequest) {
-  const body = await request.json();
-  const { joinCode, guestId, displayName } = body as {
+  const supabase = createAuthedClient(request.headers.get("authorization"));
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) {
+    return NextResponse.json({ error: "Not signed in" }, { status: 401 });
+  }
+
+  const { joinCode, displayName } = (await request.json()) as {
     joinCode?: string;
-    guestId?: string;
     displayName?: string;
   };
 
-  if (!joinCode || !guestId || !displayName) {
-    return NextResponse.json({ error: "Missing joinCode, guestId, or displayName" }, { status: 400 });
+  if (!joinCode || !displayName) {
+    return NextResponse.json({ error: "Missing joinCode or displayName" }, { status: 400 });
   }
 
   const normalizedCode = joinCode.trim().toUpperCase();
@@ -31,7 +37,7 @@ export async function POST(request: NextRequest) {
 
   const { count } = await supabase
     .from("lobby_members")
-    .select("guest_id", { count: "exact", head: true })
+    .select("user_id", { count: "exact", head: true })
     .eq("lobby_id", lobby.id);
 
   if (count !== null && count >= lobby.max_players) {
@@ -41,11 +47,11 @@ export async function POST(request: NextRequest) {
   const { error: memberError } = await supabase.from("lobby_members").upsert(
     {
       lobby_id: lobby.id,
-      guest_id: guestId,
+      user_id: user.id,
       display_name: displayName,
       is_host: false,
     },
-    { onConflict: "lobby_id,guest_id" },
+    { onConflict: "lobby_id,user_id" },
   );
 
   if (memberError) {

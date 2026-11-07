@@ -2,33 +2,38 @@
 
 import { useRouter } from "next/navigation";
 import { useState, useSyncExternalStore } from "react";
+import { ensureUserId, getAuthHeader } from "@/lib/auth/session";
 import {
-  getGuestId,
-  getGuestName,
-  getGuestNameServerSnapshot,
-  setGuestName,
-  subscribeGuestName,
-} from "@/lib/guest";
+  getDisplayName,
+  getDisplayNameServerSnapshot,
+  setDisplayName,
+  subscribeDisplayName,
+} from "@/lib/display-name";
 
 export default function HomeForm() {
   const router = useRouter();
-  const displayName = useSyncExternalStore(subscribeGuestName, getGuestName, getGuestNameServerSnapshot);
+  const displayName = useSyncExternalStore(
+    subscribeDisplayName,
+    getDisplayName,
+    getDisplayNameServerSnapshot,
+  );
   const [joinCode, setJoinCode] = useState("");
   const [pending, setPending] = useState<"create" | "join" | null>(null);
   const [error, setError] = useState("");
 
   function handleNameChange(value: string) {
-    setGuestName(value);
+    setDisplayName(value);
   }
 
   async function handleCreate() {
     setError("");
     setPending("create");
     try {
+      await ensureUserId();
       const res = await fetch("/api/lobby/create", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ guestId: getGuestId(), displayName }),
+        headers: { "Content-Type": "application/json", Authorization: await getAuthHeader() },
+        body: JSON.stringify({ displayName }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Failed to create room");
@@ -47,10 +52,11 @@ export default function HomeForm() {
     setError("");
     setPending("join");
     try {
+      await ensureUserId();
       const res = await fetch("/api/lobby/join", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ joinCode, guestId: getGuestId(), displayName }),
+        headers: { "Content-Type": "application/json", Authorization: await getAuthHeader() },
+        body: JSON.stringify({ joinCode, displayName }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Failed to join room");

@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Lalezar, Noto_Kufi_Arabic } from "next/font/google";
+import AuthProvider from "@/components/AuthProvider";
 import "./globals.css";
 
 const lalezar = Lalezar({
@@ -26,7 +27,9 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       dir="rtl"
       className={`${lalezar.variable} ${notoKufi.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col font-body">{children}</body>
+      <body className="min-h-full flex flex-col font-body">
+        <AuthProvider>{children}</AuthProvider>
+      </body>
     </html>
   );
 }

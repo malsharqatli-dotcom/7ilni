@@ -1,15 +1,21 @@
 import { NextRequest, NextResponse } from "next/server";
-import { supabase } from "@/lib/supabase/client";
+import { createAuthedClient } from "@/lib/supabase/server";
 import { generateJoinCode } from "@/lib/lobby/join-code";
 
 const MAX_CODE_ATTEMPTS = 5;
 
 export async function POST(request: NextRequest) {
-  const body = await request.json();
-  const { guestId, displayName } = body as { guestId?: string; displayName?: string };
+  const supabase = createAuthedClient(request.headers.get("authorization"));
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) {
+    return NextResponse.json({ error: "Not signed in" }, { status: 401 });
+  }
 
-  if (!guestId || !displayName) {
-    return NextResponse.json({ error: "Missing guestId or displayName" }, { status: 400 });
+  const { displayName } = (await request.json()) as { displayName?: string };
+  if (!displayName) {
+    return NextResponse.json({ error: "Missing displayName" }, { status: 400 });
   }
 
   let joinCode = "";
@@ -19,7 +25,7 @@ export async function POST(request: NextRequest) {
     joinCode = generateJoinCode();
     const { data, error } = await supabase
       .from("lobbies")
-      .insert({ join_code: joinCode, host_guest_id: guestId })
+      .insert({ join_code: joinCode, host_user_id: user.id })
       .select("id")
       .single();
 
@@ -39,7 +45,7 @@ export async function POST(request: NextRequest) {
 
   const { error: memberError } = await supabase.from("lobby_members").insert({
     lobby_id: lobbyId,
-    guest_id: guestId,
+    user_id: user.id,
     display_name: displayName,
     is_host: true,
   });
