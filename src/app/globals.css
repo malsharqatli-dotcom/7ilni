@@ -4,25 +4,25 @@
   --background: #ffffff;
   --foreground: #171717;
 
-  /* 7ilni brand palette — warm orange/red gradient identity,
-     matching the regional party-game pattern (shedhelak.com, seenjeemkw.com)
-     instead of wiki-race.com's flat pale-yellow look. */
-  --brand-red: #e8402b;
-  --brand-orange: #ff8a3d;
-  --brand-cream: #fff4e0;
-  --brand-yellow: #ffcb3d;
-  --brand-navy: #1f2452;
+  /* 7ilni brand palette — "desert dusk": indigo night sky fading into a
+     coral sunset horizon. Deliberately distinct from the generic
+     orange-to-red gameshow gradient shared by shedhelak.com/seenjeemkw.com. */
+  --brand-indigo: #241654;
+  --brand-coral: #ff5f4c;
+  --brand-gold: #ffb648;
+  --brand-sand: #fff1dd;
+  --brand-ink: #1b1340;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --color-brand-red: var(--brand-red);
-  --color-brand-orange: var(--brand-orange);
-  --color-brand-cream: var(--brand-cream);
-  --color-brand-yellow: var(--brand-yellow);
-  --color-brand-navy: var(--brand-navy);
-  --font-display: var(--font-baloo);
+  --color-brand-indigo: var(--brand-indigo);
+  --color-brand-coral: var(--brand-coral);
+  --color-brand-gold: var(--brand-gold);
+  --color-brand-sand: var(--brand-sand);
+  --color-brand-ink: var(--brand-ink);
+  --font-display: var(--font-lalezar);
   --font-body: var(--font-noto-kufi);
 }
 

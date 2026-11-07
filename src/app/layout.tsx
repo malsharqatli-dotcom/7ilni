@@ -1,11 +1,11 @@
 import type { Metadata } from "next";
-import { Baloo_Bhaijaan_2, Noto_Kufi_Arabic } from "next/font/google";
+import { Lalezar, Noto_Kufi_Arabic } from "next/font/google";
 import "./globals.css";
 
-const baloo = Baloo_Bhaijaan_2({
-  variable: "--font-baloo",
+const lalezar = Lalezar({
+  variable: "--font-lalezar",
   subsets: ["arabic", "latin"],
-  weight: ["500", "600", "700", "800"],
+  weight: "400",
 });
 
 const notoKufi = Noto_Kufi_Arabic({
@@ -24,7 +24,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
     <html
       lang="ar"
       dir="rtl"
-      className={`${baloo.variable} ${notoKufi.variable} h-full antialiased`}
+      className={`${lalezar.variable} ${notoKufi.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col font-body">{children}</body>
     </html>
