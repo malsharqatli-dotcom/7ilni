@@ -4,24 +4,23 @@
   --background: #ffffff;
   --foreground: #171717;
 
-  /* 7ilni brand palette — "desert dusk": indigo night sky fading into a
-     coral sunset horizon. Deliberately distinct from the generic
-     orange-to-red gameshow gradient shared by shedhelak.com/seenjeemkw.com. */
-  --brand-indigo: #241654;
-  --brand-coral: #ff5f4c;
-  --brand-gold: #ffb648;
-  --brand-sand: #fff1dd;
-  --brand-ink: #1b1340;
+  /* 7ilni brand palette, matched to the user-provided logo: navy wordmark,
+     vivid racing-orange road/flag accents, warm cream background. */
+  --brand-navy: #101a33;
+  --brand-orange: #f4631e;
+  --brand-cream: #f6f1e7;
+  --brand-ink: #101a33;
+  --brand-sand: #fff8ec;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --color-brand-indigo: var(--brand-indigo);
-  --color-brand-coral: var(--brand-coral);
-  --color-brand-gold: var(--brand-gold);
-  --color-brand-sand: var(--brand-sand);
+  --color-brand-navy: var(--brand-navy);
+  --color-brand-orange: var(--brand-orange);
+  --color-brand-cream: var(--brand-cream);
   --color-brand-ink: var(--brand-ink);
+  --color-brand-sand: var(--brand-sand);
   --font-display: var(--font-lalezar);
   --font-body: var(--font-noto-kufi);
 }
