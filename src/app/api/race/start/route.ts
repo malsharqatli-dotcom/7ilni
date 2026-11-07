@@ -28,13 +28,24 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Missing lobbyId" }, { status: 400 });
   }
 
-  let candidates: string[];
+  let candidates: string[] = [];
   if (deckId) {
-    const { data } = await supabase
-      .from("deck_articles")
-      .select("article_title")
-      .eq("deck_id", deckId);
-    candidates = (data ?? []).map((row) => row.article_title);
+    // Combine deck + difficulty when both are picked, but deck sizes are
+    // small (9-18 articles) — a specific tier within one deck can easily
+    // have 0-1 matches. Fall back to the whole deck rather than failing;
+    // topic is the stronger signal of what the host actually wants.
+    if (difficulty) {
+      const { data } = await supabase
+        .from("deck_articles")
+        .select("article_title, article_metadata!inner(difficulty_tier)")
+        .eq("deck_id", deckId)
+        .eq("article_metadata.difficulty_tier", difficulty);
+      candidates = (data ?? []).map((row) => row.article_title);
+    }
+    if (candidates.length < 2) {
+      const { data } = await supabase.from("deck_articles").select("article_title").eq("deck_id", deckId);
+      candidates = (data ?? []).map((row) => row.article_title);
+    }
   } else {
     const { data } = await supabase
       .from("article_metadata")

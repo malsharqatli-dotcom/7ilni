@@ -166,12 +166,9 @@ export default function LobbyRoom({ lobbyId, joinCode, maxPlayers }: LobbyRoomPr
               <button
                 key={d.id}
                 type="button"
-                onClick={() => {
-                  setDifficulty(d.id);
-                  setDeckId(null);
-                }}
+                onClick={() => setDifficulty(d.id)}
                 className={`flex-1 rounded-xl py-2 font-display text-base transition ${
-                  difficulty === d.id && !deckId
+                  difficulty === d.id
                     ? "bg-brand-orange text-white shadow-md"
                     : "bg-brand-cream text-brand-navy/70"
                 }`}
