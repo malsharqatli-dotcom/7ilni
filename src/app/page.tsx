@@ -21,6 +21,13 @@ export default function Home() {
 
         <HomeForm />
 
+        <Link
+          href="/daily"
+          className="mt-4 flex w-full items-center justify-center gap-2 rounded-2xl bg-brand-navy py-3 font-display text-xl text-white shadow-sm transition hover:brightness-110"
+        >
+          🔥 تحدي اليوم
+        </Link>
+
         <p className="mt-6 font-body text-sm text-brand-navy/70">
           عندك حساب؟{" "}
           <Link href="/login" className="font-bold underline underline-offset-2">
