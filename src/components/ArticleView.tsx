@@ -5,9 +5,12 @@ import { useRef } from "react";
 
 type ArticleViewProps = {
   html: string;
+  // Race view intercepts hops to record/broadcast them instead of just
+  // navigating; plain /article/[title] pages fall back to router.push.
+  onLinkClick?: (title: string) => void;
 };
 
-export default function ArticleView({ html }: ArticleViewProps) {
+export default function ArticleView({ html, onLinkClick }: ArticleViewProps) {
   const router = useRouter();
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -18,7 +21,11 @@ export default function ArticleView({ html }: ArticleViewProps) {
     event.preventDefault();
 
     const title = link.getAttribute("data-wiki-title");
-    if (title) {
+    if (!title) return;
+
+    if (onLinkClick) {
+      onLinkClick(title);
+    } else {
       router.push(`/article/${encodeURIComponent(title)}`);
     }
   }
