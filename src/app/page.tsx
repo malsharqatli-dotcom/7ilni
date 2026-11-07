@@ -8,9 +8,9 @@ export default function Home() {
       <DecorativeBackground />
 
       <div className="relative z-10 flex w-full max-w-md flex-col items-center text-center">
-        <Mascot className="h-32 w-32 drop-shadow-lg" />
+        <Mascot className="h-28 w-28" />
 
-        <h1 className="mt-2 font-display text-6xl text-white drop-shadow-sm">
+        <h1 className="mt-6 font-display text-6xl text-white drop-shadow-sm">
           حلّني
         </h1>
         <p className="mt-1 font-body text-lg font-semibold text-brand-sand">
