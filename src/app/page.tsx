@@ -1,13 +1,16 @@
+import Image from "next/image";
 import Link from "next/link";
 
 export default function Home() {
   return (
     <div className="flex min-h-screen flex-1 flex-col items-center justify-center bg-brand-cream px-4 py-10">
       <div className="flex w-full max-w-md flex-col items-center text-center">
-        {/* TODO: replace with the real logo once public/logo.png is added */}
-        <img
+        <Image
           src="/logo.png"
           alt="حلّني"
+          width={1536}
+          height={1024}
+          priority
           className="h-auto w-72 max-w-full"
         />
 
