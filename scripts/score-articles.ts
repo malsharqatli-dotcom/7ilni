@@ -7,12 +7,21 @@
 // doesn't cost real-world breadth), which gets the same practical result
 // — a pool of well-known, well-connected hub articles — without needing
 // to scrape and parse Vital Articles list pages.
+//
+// Word count is approximated from prop=info's wikitext byte length
+// (length / 8, a rough bytes-per-word-including-markup-overhead factor)
+// rather than fetching full prop=extracts text: explaintext extracts are
+// subject to an internal response-size cutoff that silently truncates a
+// multi-title batch to whichever single page's extract fits first, which
+// made every batch during development only "see" 1 of 3 requested titles.
+// info+links are both small, fixed-shape fields with no such truncation.
 import { writeFileSync } from "node:fs";
 
 const USER_AGENT = "7ilni/0.1 (https://example.com/7ilni; contact@example.com) Node.js";
-const BATCH_SIZE = 3;
-const DELAY_MS = 4000;
+const BATCH_SIZE = 10;
+const DELAY_MS = 3000;
 const RETRY_DELAY_MS = 15000;
+const BYTES_PER_WORD = 8;
 
 const CANDIDATES = [
   // Geography / countries
@@ -66,6 +75,18 @@ type Metadata = {
   linkCount: number;
 };
 
+type WikiApiPage = {
+  title: string;
+  missing?: boolean;
+  length?: number;
+  links?: unknown[];
+};
+
+type WikiApiResponse = {
+  query?: { pages?: WikiApiPage[] };
+  continue?: Record<string, string>;
+};
+
 function chunk<T>(arr: T[], size: number): T[][] {
   const out: T[][] = [];
   for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
@@ -75,18 +96,6 @@ function chunk<T>(arr: T[], size: number): T[][] {
 function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
-
-type WikiApiPage = {
-  title: string;
-  missing?: boolean;
-  extract?: string;
-  links?: unknown[];
-};
-
-type WikiApiResponse = {
-  query?: { pages?: WikiApiPage[] };
-  continue?: Record<string, string>;
-};
 
 async function fetchJsonOnce(
   url: URL,
@@ -100,15 +109,15 @@ async function fetchJsonOnce(
   }
 }
 
-async function fetchJson(url: URL, label: string): Promise<WikiApiResponse | null> {
+async function fetchJson(url: URL): Promise<WikiApiResponse | null> {
   let result = await fetchJsonOnce(url);
   if (!result.ok) {
-    console.warn(`  non-JSON response for ${label} (status ${result.status}): ${result.text?.slice(0, 80)}`);
-    console.warn(`  retrying ${label} after ${RETRY_DELAY_MS}ms...`);
+    console.warn(`  non-JSON response (status ${result.status}): ${result.text?.slice(0, 80)}`);
+    console.warn(`  retrying after ${RETRY_DELAY_MS}ms...`);
     await sleep(RETRY_DELAY_MS);
     result = await fetchJsonOnce(url);
     if (!result.ok) {
-      console.warn(`  retry failed for ${label} (status ${result.status})`);
+      console.warn(`  retry failed (status ${result.status})`);
       return null;
     }
   }
@@ -117,57 +126,43 @@ async function fetchJson(url: URL, label: string): Promise<WikiApiResponse | nul
 
 async function fetchBatch(titles: string[]): Promise<Map<string, Metadata>> {
   const map = new Map<string, Metadata>();
-
-  const wordUrl = new URL("https://en.wikipedia.org/w/api.php");
-  wordUrl.searchParams.set("action", "query");
-  wordUrl.searchParams.set("prop", "extracts");
-  wordUrl.searchParams.set("explaintext", "1");
-  // prop=extracts defaults to returning only ONE page's extract per call
-  // regardless of how many titles you pass — exlimit raises that (20 is
-  // the max for non-bot requests), which is why batches were only
-  // scoring 1-of-N titles.
-  wordUrl.searchParams.set("exlimit", "20");
-  wordUrl.searchParams.set("titles", titles.join("|"));
-  wordUrl.searchParams.set("format", "json");
-  wordUrl.searchParams.set("formatversion", "2");
-
-  const wordData = await fetchJson(wordUrl, "extracts");
-  await sleep(DELAY_MS);
-
-  const linkUrl = new URL("https://en.wikipedia.org/w/api.php");
-  linkUrl.searchParams.set("action", "query");
-  linkUrl.searchParams.set("prop", "links");
-  linkUrl.searchParams.set("pllimit", "500");
-  linkUrl.searchParams.set("plnamespace", "0");
-  linkUrl.searchParams.set("titles", titles.join("|"));
-  linkUrl.searchParams.set("format", "json");
-  linkUrl.searchParams.set("formatversion", "2");
-
-  const linkData = await fetchJson(linkUrl, "links");
-  await sleep(DELAY_MS);
-
-  if (!wordData || !linkData) return map;
-
-  const wordCounts = new Map<string, number>();
-  for (const page of wordData.query?.pages ?? []) {
-    if (page.missing || !page.extract) continue;
-    wordCounts.set(page.title, page.extract.trim().split(/\s+/).length);
-  }
-
   const linkCounts = new Map<string, number>();
-  for (const page of linkData.query?.pages ?? []) {
-    if (page.missing) continue;
-    linkCounts.set(page.title, page.links?.length ?? 0);
+  let plcontinue: string | undefined;
+
+  // info (byte length) + links together — both lightweight, fixed-shape
+  // fields, no response-size truncation risk the way extracts had.
+  do {
+    const url = new URL("https://en.wikipedia.org/w/api.php");
+    url.searchParams.set("action", "query");
+    url.searchParams.set("prop", "info|links");
+    url.searchParams.set("pllimit", "500");
+    url.searchParams.set("plnamespace", "0");
+    url.searchParams.set("titles", titles.join("|"));
+    url.searchParams.set("format", "json");
+    url.searchParams.set("formatversion", "2");
+    if (plcontinue) url.searchParams.set("plcontinue", plcontinue);
+
+    const data = await fetchJson(url);
+    if (!data) break;
+
+    for (const page of data.query?.pages ?? []) {
+      if (page.missing) continue;
+      linkCounts.set(page.title, (linkCounts.get(page.title) ?? 0) + (page.links?.length ?? 0));
+      if (page.length !== undefined && !map.has(page.title)) {
+        map.set(page.title, { title: page.title, wordCount: Math.round(page.length / BYTES_PER_WORD), linkCount: 0 });
+      }
+    }
+    plcontinue = data.continue?.plcontinue;
+  } while (plcontinue);
+
+  for (const [title, entry] of map) {
+    entry.linkCount = linkCounts.get(title) ?? 0;
   }
 
   for (const title of titles) {
-    const wordCount = wordCounts.get(title);
-    const linkCount = linkCounts.get(title);
-    if (wordCount === undefined || linkCount === undefined) {
+    if (![...map.keys()].some((found) => found === title)) {
       console.warn(`  skipped (not found): ${title}`);
-      continue;
     }
-    map.set(title, { title, wordCount, linkCount });
   }
 
   return map;
@@ -193,6 +188,7 @@ async function main() {
     const batchResults = await fetchBatch(batches[i]);
     results.push(...batchResults.values());
     console.log(`  scored ${results.length}/${CANDIDATES.length} so far`);
+    await sleep(DELAY_MS);
   }
 
   const rows = results.map((r) => {

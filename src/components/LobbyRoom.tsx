@@ -13,21 +13,32 @@ type Member = {
   isHost: boolean;
 };
 
+type Deck = {
+  id: string;
+  slug: string;
+  nameAr: string;
+  icon: string;
+};
+
 type LobbyRoomProps = {
   lobbyId: string;
   joinCode: string;
   maxPlayers: number;
 };
 
-// Hardcoded for M3/M4 — difficulty tiers and category decks (M5) will
-// replace this with a real pick instead of one fixed pair.
-const RACE_START_TITLE = "Jordan";
-const RACE_DESTINATION_TITLE = "Albert Einstein";
+const DIFFICULTIES: { id: "easy" | "medium" | "hard"; label: string }[] = [
+  { id: "easy", label: "سهل" },
+  { id: "medium", label: "متوسط" },
+  { id: "hard", label: "صعب" },
+];
 
 export default function LobbyRoom({ lobbyId, joinCode, maxPlayers }: LobbyRoomProps) {
   const router = useRouter();
   const [userId, setUserId] = useState<string | null>(null);
   const [members, setMembers] = useState<Member[]>([]);
+  const [decks, setDecks] = useState<Deck[]>([]);
+  const [difficulty, setDifficulty] = useState<"easy" | "medium" | "hard">("medium");
+  const [deckId, setDeckId] = useState<string | null>(null);
   const [starting, setStarting] = useState(false);
   const [error, setError] = useState("");
   const channelRef = useRef<RealtimeChannel | null>(null);
@@ -37,6 +48,16 @@ export default function LobbyRoom({ lobbyId, joinCode, maxPlayers }: LobbyRoomPr
 
   useEffect(() => {
     ensureUserId().then(setUserId);
+  }, []);
+
+  useEffect(() => {
+    supabase
+      .from("category_decks")
+      .select("id, slug, name_ar, icon")
+      .eq("is_active", true)
+      .then(({ data }) => {
+        setDecks((data ?? []).map((d) => ({ id: d.id, slug: d.slug, nameAr: d.name_ar, icon: d.icon })));
+      });
   }, []);
 
   const joinRaceAsParticipant = useCallback(
@@ -104,11 +125,7 @@ export default function LobbyRoom({ lobbyId, joinCode, maxPlayers }: LobbyRoomPr
       const res = await fetch("/api/race/start", {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: await getAuthHeader() },
-        body: JSON.stringify({
-          lobbyId,
-          startTitle: RACE_START_TITLE,
-          destinationTitle: RACE_DESTINATION_TITLE,
-        }),
+        body: JSON.stringify({ lobbyId, difficulty, deckId }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Failed to start race");
@@ -116,9 +133,9 @@ export default function LobbyRoom({ lobbyId, joinCode, maxPlayers }: LobbyRoomPr
       await channelRef.current?.send({
         type: "broadcast",
         event: "race_start",
-        payload: { raceId: data.raceId, startTitle: RACE_START_TITLE },
+        payload: { raceId: data.raceId, startTitle: data.startTitle },
       });
-      await joinRaceAsParticipant(data.raceId, RACE_START_TITLE);
+      await joinRaceAsParticipant(data.raceId, data.startTitle);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to start race");
       setStarting(false);
@@ -140,6 +157,47 @@ export default function LobbyRoom({ lobbyId, joinCode, maxPlayers }: LobbyRoomPr
           >
             ادعُ أصحابك
           </button>
+        </div>
+
+        <div className="rounded-3xl bg-white p-5 shadow-sm">
+          <h2 className="font-display text-lg text-brand-navy">مستوى الصعوبة</h2>
+          <div className="mt-2 flex gap-2">
+            {DIFFICULTIES.map((d) => (
+              <button
+                key={d.id}
+                type="button"
+                onClick={() => {
+                  setDifficulty(d.id);
+                  setDeckId(null);
+                }}
+                className={`flex-1 rounded-xl py-2 font-display text-base transition ${
+                  difficulty === d.id && !deckId
+                    ? "bg-brand-orange text-white shadow-md"
+                    : "bg-brand-cream text-brand-navy/70"
+                }`}
+              >
+                {d.label}
+              </button>
+            ))}
+          </div>
+
+          <h2 className="mt-5 font-display text-lg text-brand-navy">فئة المقالات</h2>
+          <div className="mt-2 flex flex-wrap gap-2">
+            {decks.map((deck) => (
+              <button
+                key={deck.id}
+                type="button"
+                onClick={() => setDeckId(deckId === deck.id ? null : deck.id)}
+                className={`rounded-full px-3 py-1.5 font-body text-sm font-semibold transition ${
+                  deckId === deck.id
+                    ? "bg-brand-navy text-white shadow-md"
+                    : "bg-brand-cream text-brand-navy/70"
+                }`}
+              >
+                {deck.icon} {deck.nameAr}
+              </button>
+            ))}
+          </div>
         </div>
 
         <div className="rounded-3xl bg-white p-5 shadow-sm">
