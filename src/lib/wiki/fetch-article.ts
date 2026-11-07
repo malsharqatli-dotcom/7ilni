@@ -9,7 +9,17 @@ const WIKI_USER_AGENT =
 export class ArticleNotFoundError extends Error {}
 export class RateLimitedError extends Error {}
 
+// Process-local memoization so repeat visits to the same article (going
+// back, multiple players starting on the same article) don't re-hit
+// Wikipedia. Not a substitute for M3's persistent DB cache — this only
+// lives as long as the dev/server process does — but it's a cheap, real
+// reduction in request volume today.
+const cache = new Map<string, SanitizedArticle>();
+
 export async function getArticle(title: string): Promise<SanitizedArticle> {
+  const cached = cache.get(title.toLowerCase());
+  if (cached) return cached;
+
   const response = await fetch(
     `https://en.wikipedia.org/api/rest_v1/page/html/${encodeURIComponent(title)}`,
     { headers: { "User-Agent": WIKI_USER_AGENT } },
@@ -27,5 +37,8 @@ export async function getArticle(title: string): Promise<SanitizedArticle> {
   }
 
   const rawHtml = await response.text();
-  return sanitizeArticleHtml(rawHtml, title);
+  const article = sanitizeArticleHtml(rawHtml, title);
+  cache.set(title.toLowerCase(), article);
+  cache.set(article.title.toLowerCase(), article);
+  return article;
 }
