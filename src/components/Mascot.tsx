@@ -3,12 +3,13 @@ type MascotProps = {
 };
 
 /**
- * 7ilni mark: a star (the seven-pointed star on the Jordanian flag) inside
- * a medal-ring, like a race badge. Earlier version gave the star stick
- * arms/legs and a headscarf, which read as amateur clip art rather than a
- * logo. Simplified to a flat, iconic shape — no limbs, no costume — so it
- * holds up at small sizes and doesn't borrow shedhelak.com's
- * character-mascot approach or seenjeemkw.com's pure-wordmark approach.
+ * 7ilni mark: a hand flicking the star forward, mid-throw. Speed (the
+ * flick, the motion trail) plus the star we already seeded into the
+ * dotted-route/sparkle details elsewhere, instead of discarding that
+ * identity for a generic hand icon. Earlier versions were a star with
+ * stick limbs (read as clip art) and then a static medal badge (too
+ * static for a game about quick decisions) — this version centers the
+ * gesture of flicking something fast toward a target.
  */
 export default function Mascot({ className }: MascotProps) {
   return (
@@ -18,46 +19,62 @@ export default function Mascot({ className }: MascotProps) {
       role="img"
       aria-label="شعار حلّني"
     >
-      {/* speed lines */}
-      <g stroke="var(--brand-gold)" strokeWidth="6" strokeLinecap="round" opacity="0.6">
-        <path d="M-6 82 L16 78" />
-        <path d="M-10 99 L14 99" />
-        <path d="M-6 116 L16 120" />
-      </g>
-
-      {/* medal ring */}
-      <circle cx="100" cy="99" r="82" fill="none" stroke="var(--brand-gold)" strokeWidth="6" />
-      <circle
-        cx="100"
-        cy="99"
-        r="68"
-        fill="none"
-        stroke="var(--brand-sand)"
-        strokeWidth="3"
-        strokeDasharray="1 11"
-        opacity="0.8"
-      />
-
-      {/* star body */}
+      {/* spin arc behind the flying star */}
       <path
-        d="M100 29 L118.8 73.1 L166.6 77.4 L130.4 108.9 L141.2 155.6 L100 131 L58.8 155.6 L69.6 108.9 L33.4 77.4 L81.2 73.1 Z"
-        fill="var(--brand-coral)"
-        stroke="var(--brand-ink)"
-        strokeWidth="7"
-        strokeLinejoin="round"
-      />
-
-      {/* face */}
-      <circle cx="82" cy="92" r="9" fill="white" stroke="var(--brand-ink)" strokeWidth="3" />
-      <circle cx="118" cy="92" r="9" fill="white" stroke="var(--brand-ink)" strokeWidth="3" />
-      <circle cx="83" cy="93" r="3.5" fill="var(--brand-ink)" />
-      <circle cx="119" cy="93" r="3.5" fill="var(--brand-ink)" />
-      <path
-        d="M85 107 Q100 118 115 107"
+        d="M118 38 A 40 40 0 1 1 108 92"
         fill="none"
-        stroke="var(--brand-ink)"
+        stroke="var(--brand-gold)"
         strokeWidth="4"
         strokeLinecap="round"
+        strokeDasharray="2 10"
+        opacity="0.7"
+      />
+
+      {/* motion trail from the flick to the star */}
+      <g stroke="var(--brand-gold)" strokeWidth="6" strokeLinecap="round" opacity="0.7">
+        <path d="M88 118 L115 88" />
+        <path d="M78 128 L108 95" />
+        <path d="M98 108 L120 82" />
+      </g>
+
+      {/* hand, mid-flick */}
+      <g transform="translate(60 150) rotate(-15)">
+        <ellipse
+          cx="0"
+          cy="0"
+          rx="32"
+          ry="28"
+          fill="var(--brand-sand)"
+          stroke="var(--brand-ink)"
+          strokeWidth="7"
+        />
+        {/* thumb */}
+        <path
+          d="M-13.8 1.5 L-39.2 23.1 L-48.8 13 L-26.2 -11.5 Z"
+          fill="var(--brand-sand)"
+          stroke="var(--brand-ink)"
+          strokeWidth="6"
+          strokeLinejoin="round"
+        />
+        <circle cx="-44" cy="18" r="7" fill="var(--brand-sand)" stroke="var(--brand-ink)" strokeWidth="6" />
+        {/* index finger, mid-flick */}
+        <path
+          d="M9.8 -25.3 L64.5 -60.9 L71.5 -51.1 L20.3 -10.7 Z"
+          fill="var(--brand-sand)"
+          stroke="var(--brand-ink)"
+          strokeWidth="6"
+          strokeLinejoin="round"
+        />
+        <circle cx="68" cy="-56" r="6" fill="var(--brand-sand)" stroke="var(--brand-ink)" strokeWidth="6" />
+      </g>
+
+      {/* small flying star */}
+      <path
+        d="M150 30 L159.4 52 L183.3 54.2 L165.2 70 L170.6 93.3 L150 81 L129.4 93.3 L134.8 70 L116.7 54.2 L140.6 52 Z"
+        fill="var(--brand-coral)"
+        stroke="var(--brand-ink)"
+        strokeWidth="6"
+        strokeLinejoin="round"
       />
     </svg>
   );
