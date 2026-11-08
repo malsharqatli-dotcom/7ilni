@@ -7,6 +7,11 @@ import { sanitizeArticleHtml, type SanitizedArticle } from "./sanitize-html";
 const WIKI_USER_AGENT =
   "7ilni/0.1 (https://example.com/7ilni; contact@example.com) Node.js";
 
+// Wikipedia's 429s come with a short Retry-After (observed: ~11s), not a
+// long-term ban — worth one automatic retry rather than failing the
+// player's request outright. Capped so a request never hangs too long.
+const MAX_RETRY_WAIT_MS = 15000;
+
 export class ArticleNotFoundError extends Error {}
 export class RateLimitedError extends Error {}
 
@@ -53,14 +58,27 @@ async function storeCachedArticle(requestedTitle: string, article: SanitizedArti
   );
 }
 
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function fetchFromWikipedia(title: string): Promise<Response> {
+  return fetch(`https://en.wikipedia.org/api/rest_v1/page/html/${encodeURIComponent(title)}`, {
+    headers: { "User-Agent": WIKI_USER_AGENT },
+  });
+}
+
 export async function getArticle(title: string): Promise<SanitizedArticle> {
   const cached = await getCachedArticle(title);
   if (cached) return cached;
 
-  const response = await fetch(
-    `https://en.wikipedia.org/api/rest_v1/page/html/${encodeURIComponent(title)}`,
-    { headers: { "User-Agent": WIKI_USER_AGENT } },
-  );
+  let response = await fetchFromWikipedia(title);
+
+  if (response.status === 429) {
+    const retryAfterSeconds = Number(response.headers.get("retry-after")) || 5;
+    await sleep(Math.min(retryAfterSeconds * 1000, MAX_RETRY_WAIT_MS));
+    response = await fetchFromWikipedia(title);
+  }
 
   if (response.status === 404) {
     throw new ArticleNotFoundError(`No Wikipedia article for "${title}"`);
