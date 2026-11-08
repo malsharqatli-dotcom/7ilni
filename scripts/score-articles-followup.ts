@@ -4,7 +4,7 @@
 // score-articles.ts, just a smaller list and slower pacing.
 import { writeFileSync } from "node:fs";
 
-const USER_AGENT = "7ilni/0.1 (https://example.com/7ilni; contact@example.com) Node.js";
+const USER_AGENT = "7ilni/1.0 (malsharqatli@gmail.com) Node.js";
 const BATCH_SIZE = 4;
 const DELAY_MS = 6000;
 const RETRY_DELAY_MS = 20000;

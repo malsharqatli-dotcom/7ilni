@@ -2,10 +2,8 @@ import { supabase } from "@/lib/supabase/client";
 import { sanitizeArticleHtml, type SanitizedArticle } from "./sanitize-html";
 
 // Wikimedia's API Usage Guidelines require a descriptive User-Agent with
-// contact info, or requests get capped much harder (10 req/min vs 200).
-// TODO: replace the contact URL/email with 7ilni's real ones before deploying.
-const WIKI_USER_AGENT =
-  "7ilni/0.1 (https://example.com/7ilni; contact@example.com) Node.js";
+// real contact info, or requests get capped much harder (10 req/min vs 200).
+const WIKI_USER_AGENT = "7ilni/1.0 (malsharqatli@gmail.com) Node.js";
 
 // Wikipedia's 429s come with a short Retry-After (observed: ~11s), not a
 // long-term ban — worth one automatic retry rather than failing the
