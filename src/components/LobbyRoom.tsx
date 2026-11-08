@@ -27,14 +27,112 @@ type LobbyRoomProps = {
   maxPlayers: number;
 };
 
+type ArticleSuggestion = { title: string; difficultyTier: "easy" | "medium" | "hard" };
+
 const DIFFICULTIES: { id: "easy" | "medium" | "hard"; label: string }[] = [
   { id: "easy", label: "سهل" },
   { id: "medium", label: "متوسط" },
   { id: "hard", label: "صعب" },
 ];
 
+const DIFFICULTY_LABEL: Record<string, string> = { easy: "سهل", medium: "متوسط", hard: "صعب" };
+
 const TEAMS = ["الفريق الأول", "الفريق الثاني"];
 const STAGE_COUNTS = [2, 3, 4, 5];
+
+function ArticlePicker({
+  label,
+  value,
+  onChange,
+  excludeTitle,
+}: {
+  label: string;
+  value: string;
+  onChange: (title: string) => void;
+  excludeTitle: string;
+}) {
+  const [query, setQuery] = useState(value);
+  const [suggestions, setSuggestions] = useState<ArticleSuggestion[]>([]);
+  const [open, setOpen] = useState(false);
+  const [rolling, setRolling] = useState(false);
+
+  // Debounced search-as-you-type against the scored article pool — this
+  // effect reacts to the query changing, not to something derivable at
+  // render time, so it genuinely needs the async round trip here.
+  useEffect(() => {
+    if (query.trim().length < 2) return;
+    const timeout = setTimeout(async () => {
+      const res = await fetch(`/api/articles/search?q=${encodeURIComponent(query)}`);
+      const data = await res.json();
+      setSuggestions(data.results ?? []);
+    }, 250);
+    return () => clearTimeout(timeout);
+  }, [query]);
+
+  const visibleSuggestions = query.trim().length < 2 ? [] : suggestions;
+
+  function pickSuggestion(title: string) {
+    setQuery(title);
+    onChange(title);
+    setOpen(false);
+  }
+
+  async function handleRoll() {
+    setRolling(true);
+    try {
+      const res = await fetch(`/api/articles/random?exclude=${encodeURIComponent(excludeTitle)}`);
+      const data = await res.json();
+      if (res.ok) pickSuggestion(data.title);
+    } finally {
+      setRolling(false);
+    }
+  }
+
+  return (
+    <div className="relative flex-1">
+      <label className="font-body text-xs font-semibold text-brand-navy/60">{label}</label>
+      <div className="mt-1 flex gap-1.5">
+        <input
+          type="text"
+          value={query}
+          onChange={(e) => {
+            setQuery(e.target.value);
+            onChange(e.target.value);
+          }}
+          onFocus={() => setOpen(true)}
+          onBlur={() => setTimeout(() => setOpen(false), 150)}
+          placeholder="اكتب اسم مقالة..."
+          className="w-full rounded-xl bg-brand-cream px-3 py-2 font-body text-sm text-brand-navy outline-none focus:ring-2 focus:ring-brand-orange"
+        />
+        <button
+          type="button"
+          onClick={handleRoll}
+          disabled={rolling}
+          title="اختيار عشوائي"
+          className="shrink-0 rounded-xl bg-brand-navy px-3 py-2 text-lg disabled:opacity-60"
+        >
+          🎲
+        </button>
+      </div>
+      {open && visibleSuggestions.length > 0 && (
+        <ul className="absolute z-10 mt-1 w-full overflow-hidden rounded-xl bg-white shadow-lg">
+          {visibleSuggestions.map((s) => (
+            <li key={s.title}>
+              <button
+                type="button"
+                onClick={() => pickSuggestion(s.title)}
+                className="flex w-full items-center justify-between px-3 py-2 text-start font-body text-sm text-brand-navy hover:bg-brand-cream"
+              >
+                <span>{s.title}</span>
+                <span className="text-xs text-brand-navy/50">{DIFFICULTY_LABEL[s.difficultyTier]}</span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
 
 export default function LobbyRoom({ lobbyId, joinCode, maxPlayers }: LobbyRoomProps) {
   const router = useRouter();
@@ -45,6 +143,9 @@ export default function LobbyRoom({ lobbyId, joinCode, maxPlayers }: LobbyRoomPr
   const [difficulty, setDifficulty] = useState<"easy" | "medium" | "hard">("medium");
   const [deckId, setDeckId] = useState<string | null>(null);
   const [stageCount, setStageCount] = useState(3);
+  const [pairingMode, setPairingMode] = useState<"random" | "manual">("random");
+  const [manualStart, setManualStart] = useState("");
+  const [manualDestination, setManualDestination] = useState("");
   const [starting, setStarting] = useState(false);
   const [error, setError] = useState("");
   const channelRef = useRef<RealtimeChannel | null>(null);
@@ -149,10 +250,18 @@ export default function LobbyRoom({ lobbyId, joinCode, maxPlayers }: LobbyRoomPr
     setError("");
     setStarting(true);
     try {
+      const manual = pairingMode === "manual" && mode === "ffa";
       const res = await fetch("/api/race/start", {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: await getAuthHeader() },
-        body: JSON.stringify({ lobbyId, mode, difficulty, deckId, stageCount }),
+        body: JSON.stringify({
+          lobbyId,
+          mode,
+          difficulty,
+          deckId,
+          stageCount,
+          ...(manual ? { manualStart, manualDestination } : {}),
+        }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Failed to start race");
@@ -169,7 +278,12 @@ export default function LobbyRoom({ lobbyId, joinCode, maxPlayers }: LobbyRoomPr
     }
   }
 
-  const canStart = mode === "ffa" || members.every((m) => !!m.teamName);
+  const manualValid =
+    manualStart.trim().length > 0 &&
+    manualDestination.trim().length > 0 &&
+    manualStart.trim().toLowerCase() !== manualDestination.trim().toLowerCase();
+  const canStart =
+    mode === "teams" ? members.every((m) => !!m.teamName) : pairingMode === "random" || manualValid;
 
   return (
     <div className="flex min-h-screen flex-1 flex-col items-center bg-brand-cream px-4 py-8">
@@ -202,7 +316,10 @@ export default function LobbyRoom({ lobbyId, joinCode, maxPlayers }: LobbyRoomPr
             </button>
             <button
               type="button"
-              onClick={() => setMode("teams")}
+              onClick={() => {
+                setMode("teams");
+                setPairingMode("random");
+              }}
               className={`flex-1 rounded-xl py-2 font-display text-base transition ${
                 mode === "teams" ? "bg-brand-orange text-white shadow-md" : "bg-brand-cream text-brand-navy/70"
               }`}
@@ -247,41 +364,86 @@ export default function LobbyRoom({ lobbyId, joinCode, maxPlayers }: LobbyRoomPr
             </>
           )}
 
-          <h2 className="mt-5 font-display text-lg text-brand-navy">مستوى الصعوبة</h2>
-          <div className="mt-2 flex gap-2">
-            {DIFFICULTIES.map((d) => (
-              <button
-                key={d.id}
-                type="button"
-                onClick={() => setDifficulty(d.id)}
-                className={`flex-1 rounded-xl py-2 font-display text-base transition ${
-                  difficulty === d.id
-                    ? "bg-brand-orange text-white shadow-md"
-                    : "bg-brand-cream text-brand-navy/70"
-                }`}
-              >
-                {d.label}
-              </button>
-            ))}
-          </div>
+          {mode === "ffa" && (
+            <>
+              <h2 className="mt-5 font-display text-lg text-brand-navy">البداية والنهاية</h2>
+              <div className="mt-2 flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setPairingMode("random")}
+                  className={`flex-1 rounded-xl py-2 font-display text-base transition ${
+                    pairingMode === "random" ? "bg-brand-orange text-white shadow-md" : "bg-brand-cream text-brand-navy/70"
+                  }`}
+                >
+                  عشوائي
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPairingMode("manual")}
+                  className={`flex-1 rounded-xl py-2 font-display text-base transition ${
+                    pairingMode === "manual" ? "bg-brand-orange text-white shadow-md" : "bg-brand-cream text-brand-navy/70"
+                  }`}
+                >
+                  اختَرها بنفسك
+                </button>
+              </div>
+            </>
+          )}
 
-          <h2 className="mt-5 font-display text-lg text-brand-navy">فئة المقالات</h2>
-          <div className="mt-2 flex flex-wrap gap-2">
-            {decks.map((deck) => (
-              <button
-                key={deck.id}
-                type="button"
-                onClick={() => setDeckId(deckId === deck.id ? null : deck.id)}
-                className={`rounded-full px-3 py-1.5 font-body text-sm font-semibold transition ${
-                  deckId === deck.id
-                    ? "bg-brand-navy text-white shadow-md"
-                    : "bg-brand-cream text-brand-navy/70"
-                }`}
-              >
-                {deck.icon} {deck.nameAr}
-              </button>
-            ))}
-          </div>
+          {mode === "ffa" && pairingMode === "manual" ? (
+            <div className="mt-4 flex gap-2">
+              <ArticlePicker
+                label="من"
+                value={manualStart}
+                onChange={setManualStart}
+                excludeTitle={manualDestination}
+              />
+              <ArticlePicker
+                label="إلى"
+                value={manualDestination}
+                onChange={setManualDestination}
+                excludeTitle={manualStart}
+              />
+            </div>
+          ) : (
+            <>
+              <h2 className="mt-5 font-display text-lg text-brand-navy">مستوى الصعوبة</h2>
+              <div className="mt-2 flex gap-2">
+                {DIFFICULTIES.map((d) => (
+                  <button
+                    key={d.id}
+                    type="button"
+                    onClick={() => setDifficulty(d.id)}
+                    className={`flex-1 rounded-xl py-2 font-display text-base transition ${
+                      difficulty === d.id
+                        ? "bg-brand-orange text-white shadow-md"
+                        : "bg-brand-cream text-brand-navy/70"
+                    }`}
+                  >
+                    {d.label}
+                  </button>
+                ))}
+              </div>
+
+              <h2 className="mt-5 font-display text-lg text-brand-navy">فئة المقالات</h2>
+              <div className="mt-2 flex flex-wrap gap-2">
+                {decks.map((deck) => (
+                  <button
+                    key={deck.id}
+                    type="button"
+                    onClick={() => setDeckId(deckId === deck.id ? null : deck.id)}
+                    className={`rounded-full px-3 py-1.5 font-body text-sm font-semibold transition ${
+                      deckId === deck.id
+                        ? "bg-brand-navy text-white shadow-md"
+                        : "bg-brand-cream text-brand-navy/70"
+                    }`}
+                  >
+                    {deck.icon} {deck.nameAr}
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
         </div>
 
         <div className="rounded-3xl bg-white p-5 shadow-sm">
@@ -317,7 +479,9 @@ export default function LobbyRoom({ lobbyId, joinCode, maxPlayers }: LobbyRoomPr
             </button>
             {!canStart && (
               <p className="text-center font-body text-sm text-brand-navy/60">
-                لازم كل اللاعبين يختاروا فريق قبل البدء
+                {mode === "teams"
+                  ? "لازم كل اللاعبين يختاروا فريق قبل البدء"
+                  : "لازم تختار مقالة البداية والنهاية (ومختلفتين عن بعض)"}
               </p>
             )}
           </>

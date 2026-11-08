@@ -7,6 +7,8 @@ type StartBody = {
   difficulty?: "easy" | "medium" | "hard";
   deckId?: string;
   stageCount?: number;
+  manualStart?: string;
+  manualDestination?: string;
 };
 
 // Below this many candidates, a deck+difficulty combo doesn't have enough
@@ -39,9 +41,52 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Not signed in" }, { status: 401 });
   }
 
-  const { lobbyId, mode, difficulty, deckId, stageCount } = (await request.json()) as StartBody;
+  const { lobbyId, mode, difficulty, deckId, stageCount, manualStart, manualDestination } =
+    (await request.json()) as StartBody;
   if (!lobbyId) {
     return NextResponse.json({ error: "Missing lobbyId" }, { status: 400 });
+  }
+
+  const isTeams = mode === "teams";
+
+  if (manualStart && manualDestination) {
+    // Manual picks are scoped to FFA (one start/destination), and only to
+    // titles the host actually picked from the scored pool — same guarantee
+    // the difficulty tiers give the random flow, so there's no dead-end
+    // stub page and no need for a separate custom-pair difficulty estimate.
+    if (isTeams) {
+      return NextResponse.json({ error: "Manual picks aren't supported in teams mode" }, { status: 400 });
+    }
+    if (manualStart.trim().toLowerCase() === manualDestination.trim().toLowerCase()) {
+      return NextResponse.json({ error: "Start and destination must be different articles" }, { status: 400 });
+    }
+
+    const { data: validTitles } = await supabase
+      .from("article_metadata")
+      .select("title")
+      .in("title", [manualStart, manualDestination]);
+    if ((validTitles ?? []).length !== 2) {
+      return NextResponse.json({ error: "Unknown article title" }, { status: 422 });
+    }
+
+    const { data: race, error: raceError } = await supabase
+      .from("races")
+      .insert({
+        lobby_id: lobbyId,
+        start_title: manualStart,
+        destination_title: manualDestination,
+        stage_pairs: null,
+        started_at: new Date(Date.now() + COUNTDOWN_MS).toISOString(),
+      })
+      .select("id")
+      .single();
+
+    if (raceError || !race) {
+      return NextResponse.json({ error: raceError?.message ?? "Failed to create race" }, { status: 500 });
+    }
+
+    await supabase.from("lobbies").update({ status: "in_progress" }).eq("id", lobbyId);
+    return NextResponse.json({ raceId: race.id, startTitle: manualStart });
   }
 
   let candidates: string[] = [];
@@ -81,7 +126,6 @@ export async function POST(request: NextRequest) {
     .limit(RECENT_RACES_TO_AVOID);
   const avoid = new Set((recentRaces ?? []).flatMap((r) => [r.start_title, r.destination_title]));
 
-  const isTeams = mode === "teams";
   const stagesNeeded = isTeams ? Math.max(2, Math.min(5, stageCount ?? 3)) : 1;
 
   const stagePairs: { start: string; destination: string }[] = [];
