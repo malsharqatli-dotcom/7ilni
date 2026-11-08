@@ -95,6 +95,9 @@ export default function DailyChallengeView({ date, startTitle, destinationTitle 
 
   async function handleLinkClick(toTitle: string) {
     if (loading) return;
+    // Scroll to top the instant the click registers, not once the fetch
+    // resolves — on a slow connection that can take a few seconds.
+    window.scrollTo(0, 0);
     const nextHopCount = hopCount + 1;
     setHopCount(nextHopCount);
 

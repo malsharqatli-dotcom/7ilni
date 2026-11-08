@@ -236,6 +236,11 @@ export default function RaceView({
 
     const fromTitle = currentTitle;
     setLoading(true);
+    // Scroll to top the instant the click registers, not once the hop/fetch
+    // round trip finishes — on a slow connection that round trip can take
+    // several seconds, and the page should snap to top right away rather
+    // than sitting at the old scroll position for the whole wait.
+    window.scrollTo(0, 0);
     try {
       const res = await fetch("/api/race/hop", {
         method: "POST",
