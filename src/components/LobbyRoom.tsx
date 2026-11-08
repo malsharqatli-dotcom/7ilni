@@ -37,7 +37,7 @@ const DIFFICULTIES: { id: "easy" | "medium" | "hard"; label: string }[] = [
 
 const DIFFICULTY_LABEL: Record<string, string> = { easy: "سهل", medium: "متوسط", hard: "صعب" };
 
-const TEAMS = ["الفريق الأول", "الفريق الثاني"];
+const DEFAULT_TEAMS = ["الفريق الأول", "الفريق الثاني"];
 const STAGE_COUNTS = [2, 3, 4, 5];
 
 function ArticlePicker({
@@ -148,6 +148,9 @@ export default function LobbyRoom({ lobbyId, joinCode, maxPlayers }: LobbyRoomPr
   const [manualDestination, setManualDestination] = useState("");
   const [starting, setStarting] = useState(false);
   const [error, setError] = useState("");
+  const [teamNames, setTeamNames] = useState<string[]>(DEFAULT_TEAMS);
+  const [editingTeamIndex, setEditingTeamIndex] = useState<number | null>(null);
+  const [teamNameDraft, setTeamNameDraft] = useState("");
   const channelRef = useRef<RealtimeChannel | null>(null);
   const selfRef = useRef<Member | null>(null);
 
@@ -209,6 +212,16 @@ export default function LobbyRoom({ lobbyId, joinCode, maxPlayers }: LobbyRoomPr
         // change after that, so the closure here must read the latest.
         joinRaceAsParticipant(payload.raceId, payload.startTitle, selfRef.current?.teamName ?? null);
       })
+      .on("broadcast", { event: "team_renamed" }, ({ payload }) => {
+        const { oldName, newName } = payload as { oldName: string; newName: string };
+        setTeamNames((prev) => prev.map((name) => (name === oldName ? newName : name)));
+        // Team membership lives in presence, which each client owns and
+        // tracks for itself — a teammate's rename only reaches my on-screen
+        // name tag once I re-track with it, same as picking a team at all.
+        if (selfRef.current?.teamName === oldName) {
+          channel.track({ ...selfRef.current, teamName: newName });
+        }
+      })
       .subscribe(async (status) => {
         if (status !== "SUBSCRIBED") return;
 
@@ -243,6 +256,41 @@ export default function LobbyRoom({ lobbyId, joinCode, maxPlayers }: LobbyRoomPr
       displayName: getDisplayName(),
       isHost,
       teamName,
+    });
+  }
+
+  function startRenamingTeam(index: number) {
+    setEditingTeamIndex(index);
+    setTeamNameDraft(teamNames[index]);
+  }
+
+  async function handleRenameTeam(index: number) {
+    const oldName = teamNames[index];
+    const newName = teamNameDraft.trim();
+    setEditingTeamIndex(null);
+    if (!newName || newName === oldName) return;
+
+    // lobby_members' RLS only allows updating your own row, but renaming a
+    // team means updating every teammate's row — same reason the race-time
+    // team RPCs exist (see 0007_team_advance_functions.sql).
+    const { error: renameError } = await supabase.rpc("rename_lobby_team", {
+      p_lobby_id: lobbyId,
+      p_old_name: oldName,
+      p_new_name: newName,
+    });
+    if (renameError) {
+      setError(renameError.message);
+      return;
+    }
+
+    setTeamNames((prev) => prev.map((name, i) => (i === index ? newName : name)));
+    if (self?.teamName === oldName) {
+      await channelRef.current?.track({ userId, displayName: getDisplayName(), isHost, teamName: newName });
+    }
+    await channelRef.current?.send({
+      type: "broadcast",
+      event: "team_renamed",
+      payload: { oldName, newName },
     });
   }
 
@@ -331,18 +379,50 @@ export default function LobbyRoom({ lobbyId, joinCode, maxPlayers }: LobbyRoomPr
           {mode === "teams" && (
             <>
               <h2 className="mt-5 font-display text-lg text-brand-navy">فريقك</h2>
-              <div className="mt-2 flex gap-2">
-                {TEAMS.map((team) => (
-                  <button
-                    key={team}
-                    type="button"
-                    onClick={() => handlePickTeam(team)}
-                    className={`flex-1 rounded-xl py-2 font-body text-sm font-semibold transition ${
-                      self?.teamName === team ? "bg-brand-navy text-white shadow-md" : "bg-brand-cream text-brand-navy/70"
-                    }`}
-                  >
-                    {team}
-                  </button>
+              <div className="mt-2 flex flex-col gap-2">
+                {teamNames.map((team, i) => (
+                  <div key={i} className="flex gap-2">
+                    {editingTeamIndex === i ? (
+                      <>
+                        <input
+                          type="text"
+                          value={teamNameDraft}
+                          onChange={(e) => setTeamNameDraft(e.target.value)}
+                          onKeyDown={(e) => e.key === "Enter" && handleRenameTeam(i)}
+                          autoFocus
+                          maxLength={24}
+                          className="flex-1 rounded-xl bg-brand-cream px-3 py-2 font-body text-sm text-brand-navy outline-none focus:ring-2 focus:ring-brand-orange"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => handleRenameTeam(i)}
+                          className="shrink-0 rounded-xl bg-brand-orange px-4 py-2 font-body text-sm font-semibold text-white"
+                        >
+                          حفظ
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => handlePickTeam(team)}
+                          className={`flex-1 rounded-xl py-2 font-body text-sm font-semibold transition ${
+                            self?.teamName === team ? "bg-brand-navy text-white shadow-md" : "bg-brand-cream text-brand-navy/70"
+                          }`}
+                        >
+                          {team}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => startRenamingTeam(i)}
+                          title="غيّر اسم الفريق"
+                          className="shrink-0 rounded-xl bg-brand-cream px-3 py-2 text-base"
+                        >
+                          ✏️
+                        </button>
+                      </>
+                    )}
+                  </div>
                 ))}
               </div>
 
@@ -391,7 +471,7 @@ export default function LobbyRoom({ lobbyId, joinCode, maxPlayers }: LobbyRoomPr
           )}
 
           {mode === "ffa" && pairingMode === "manual" ? (
-            <div className="mt-4 flex gap-2">
+            <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:gap-2">
               <ArticlePicker
                 label="من"
                 value={manualStart}

@@ -49,3 +49,18 @@ body {
 .wiki-article a.wiki-link-disabled {
   color: inherit;
 }
+
+/* Wikipedia tables (infoboxes, data tables) are often wider than a phone
+   screen and don't reflow — wrap each in its own scroller so the extra
+   columns are swipe-able instead of silently clipped at the edge. */
+.wiki-article table {
+  display: block;
+  overflow-x: auto;
+  max-width: 100%;
+  -webkit-overflow-scrolling: touch;
+}
+
+.wiki-article img {
+  max-width: 100%;
+  height: auto;
+}
