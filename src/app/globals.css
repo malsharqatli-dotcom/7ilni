@@ -81,10 +81,13 @@ body {
 
 /* A small gradient accent bar along a card's top edge so UI cards don't
    read as flat white rectangles. Not used on the wiki article view itself,
-   which should stay neutral and readable. */
+   which should stay neutral and readable.
+   No overflow:hidden here — that was clipping the manual picker's
+   autocomplete dropdown, which needs to overflow the card below its
+   input. border-radius:inherit keeps the bar's own corners from poking
+   out past the card's rounded top edge without needing to clip anything. */
 .brand-card {
   position: relative;
-  overflow: hidden;
 }
 
 .brand-card::before {
@@ -94,6 +97,7 @@ body {
   top: 0;
   height: 4px;
   background: linear-gradient(90deg, var(--brand-orange), var(--brand-navy));
+  border-radius: inherit;
 }
 
 .btn-primary {

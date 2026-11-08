@@ -7,11 +7,13 @@ export default async function RacePage(props: PageProps<"/race/[id]">) {
 
   const { data: race, error } = await supabase
     .from("races")
-    .select("id, start_title, destination_title, started_at, stage_pairs")
+    .select("id, lobby_id, start_title, destination_title, started_at, stage_pairs")
     .eq("id", id)
     .single();
 
   if (error || !race) notFound();
+
+  const { data: lobby } = await supabase.from("lobbies").select("join_code").eq("id", race.lobby_id).single();
 
   const { data: participants } = await supabase
     .from("race_participants")
@@ -21,6 +23,7 @@ export default async function RacePage(props: PageProps<"/race/[id]">) {
   return (
     <RaceView
       raceId={race.id}
+      joinCode={lobby?.join_code ?? null}
       startTitle={race.start_title}
       destinationTitle={race.destination_title}
       startedAt={race.started_at}

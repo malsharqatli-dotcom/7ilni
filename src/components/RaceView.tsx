@@ -1,10 +1,13 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import confetti from "canvas-confetti";
 import ArticleView from "@/components/ArticleView";
 import { supabase } from "@/lib/supabase/client";
 import { ensureUserId, getAuthHeader } from "@/lib/auth/session";
+
+const RETURN_TO_LOBBY_DELAY_MS = 5000;
 
 type Participant = {
   user_id: string;
@@ -21,6 +24,7 @@ type StagePair = { start: string; destination: string };
 
 type RaceViewProps = {
   raceId: string;
+  joinCode: string | null;
   startTitle: string;
   destinationTitle: string;
   startedAt: string;
@@ -68,12 +72,14 @@ function summarizeTeams(list: Participant[]) {
 
 export default function RaceView({
   raceId,
+  joinCode,
   startTitle,
   destinationTitle,
   startedAt,
   stagePairs,
   initialParticipants,
 }: RaceViewProps) {
+  const router = useRouter();
   const isTeamsMode = !!stagePairs;
   const [myUserId, setMyUserId] = useState<string | null>(null);
   const [countdown, setCountdown] = useState<number | null>(null);
@@ -103,6 +109,15 @@ export default function RaceView({
   const finishRank = localFinishRank ?? (teamFinished ? myParticipant!.finish_rank : null);
 
   const currentDestination = isTeamsMode ? stagePairs![myStageIndex].destination : destinationTitle;
+
+  // The moment anyone (or any team) is confirmed rank 1, the race is
+  // decided — every connected client sees this via the same realtime
+  // participants subscription everything else here already relies on.
+  const teams = isTeamsMode ? summarizeTeams(participants) : [];
+  const winnerName = isTeamsMode
+    ? teams.find((t) => t.finished && t.finishRank === 1)?.teamName ?? null
+    : participants.find((p) => p.status === "finished" && p.finish_rank === 1)?.display_name ?? null;
+  const raceOver = winnerName !== null;
 
   useEffect(() => {
     ensureUserId().then(setMyUserId);
@@ -190,6 +205,15 @@ export default function RaceView({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isTeamsMode, myStageIndex, finished]);
 
+  // Once a winner is decided, the race is over for everyone — send every
+  // connected client (winner included) back to the lobby after a short
+  // pause so the announcement has time to register.
+  useEffect(() => {
+    if (!raceOver || !joinCode) return;
+    const timeout = setTimeout(() => router.push(`/lobby/${joinCode}`), RETURN_TO_LOBBY_DELAY_MS);
+    return () => clearTimeout(timeout);
+  }, [raceOver, joinCode, router]);
+
   async function fetchArticle(title: string) {
     setLoading(true);
     setError("");
@@ -252,7 +276,6 @@ export default function RaceView({
 
   const minutes = String(Math.floor(elapsed / 60)).padStart(2, "0");
   const seconds = String(elapsed % 60).padStart(2, "0");
-  const teams = isTeamsMode ? summarizeTeams(participants) : [];
 
   return (
     <div className="brand-bg min-h-screen px-4 py-6">
@@ -275,6 +298,16 @@ export default function RaceView({
           {finished && (
             <div className="btn-primary mb-4 animate-bounce rounded-2xl px-5 py-4 text-center font-display text-2xl text-white shadow-md">
               🎉 {isTeamsMode ? `فريقك وصل! الترتيب: ${finishRank}` : `وصلت! ترتيبك: ${finishRank}`}
+              {raceOver && (
+                <p className="mt-1 font-body text-sm font-normal opacity-90">جاري الرجوع للغرفة...</p>
+              )}
+            </div>
+          )}
+
+          {raceOver && !finished && (
+            <div className="mb-4 rounded-2xl bg-brand-navy px-5 py-4 text-center font-display text-2xl text-white shadow-md">
+              🏆 فاز {winnerName}!
+              <p className="mt-1 font-body text-sm font-normal opacity-90">جاري الرجوع للغرفة...</p>
             </div>
           )}
 
