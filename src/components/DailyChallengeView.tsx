@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import confetti from "canvas-confetti";
 import ArticleView from "@/components/ArticleView";
 import { supabase } from "@/lib/supabase/client";
 import { ensureUserId, getAuthHeader } from "@/lib/auth/session";
@@ -101,6 +102,7 @@ export default function DailyChallengeView({ date, startTitle, destinationTitle 
       const result: LeaderboardRow = { display_name: getDisplayName(), hop_count: nextHopCount, time_seconds: timeSeconds };
       setMyResult(result);
       setPhase("done");
+      confetti({ particleCount: 150, spread: 90, origin: { y: 0.6 } });
 
       await fetch("/api/daily/complete", {
         method: "POST",
@@ -127,8 +129,8 @@ export default function DailyChallengeView({ date, startTitle, destinationTitle 
       <div className="min-h-screen bg-brand-cream px-4 py-8">
         <div className="mx-auto max-w-md">
           <h1 className="text-center font-display text-3xl text-brand-navy">تحدي اليوم</h1>
-          <div className="mt-4 rounded-2xl bg-brand-orange px-5 py-4 text-center font-display text-xl text-white shadow-md">
-            خلصت! {formatTime(myResult.time_seconds)} — {myResult.hop_count} نقلة
+          <div className="mt-4 animate-bounce rounded-2xl bg-brand-orange px-5 py-4 text-center font-display text-xl text-white shadow-md">
+            🎉 خلصت! {formatTime(myResult.time_seconds)} — {myResult.hop_count} نقلة
           </div>
 
           <div className="mt-5 rounded-2xl bg-white p-4 shadow-sm">

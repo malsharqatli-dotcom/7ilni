@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import confetti from "canvas-confetti";
 import ArticleView from "@/components/ArticleView";
 import { supabase } from "@/lib/supabase/client";
 import { getAuthHeader } from "@/lib/auth/session";
@@ -39,6 +40,8 @@ export default function RaceView({
   startedAt,
   initialParticipants,
 }: RaceViewProps) {
+  const [countdown, setCountdown] = useState<number | null>(null);
+  const [raceStarted, setRaceStarted] = useState(false);
   const [currentTitle, setCurrentTitle] = useState(startTitle);
   const [articleTitle, setArticleTitle] = useState(startTitle);
   const [articleHtml, setArticleHtml] = useState("");
@@ -49,18 +52,44 @@ export default function RaceView({
   const [elapsed, setElapsed] = useState(0);
   const [error, setError] = useState("");
 
+  // started_at is a few seconds in the future (set by /api/race/start) so
+  // every player's countdown is synced off the same timestamp, instead of
+  // each client just running its own independent "wait 3 seconds" timer.
   useEffect(() => {
-    fetchArticle(startTitle);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    const target = new Date(startedAt).getTime();
+
+    function tick() {
+      const remaining = target - Date.now();
+      if (remaining <= 0) {
+        setCountdown(null);
+        setRaceStarted(true);
+        return false;
+      }
+      setCountdown(Math.ceil(remaining / 1000));
+      return true;
+    }
+
+    if (!tick()) return;
+    const interval = setInterval(() => {
+      if (!tick()) clearInterval(interval);
+    }, 100);
+    return () => clearInterval(interval);
+  }, [startedAt]);
 
   useEffect(() => {
+    if (!raceStarted) return;
+    fetchArticle(startTitle);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [raceStarted]);
+
+  useEffect(() => {
+    if (!raceStarted) return;
     const started = new Date(startedAt).getTime();
     const interval = setInterval(() => {
       setElapsed(Math.floor((Date.now() - started) / 1000));
     }, 1000);
     return () => clearInterval(interval);
-  }, [startedAt]);
+  }, [raceStarted, startedAt]);
 
   useEffect(() => {
     const channel = supabase
@@ -116,6 +145,7 @@ export default function RaceView({
       if (data.finished) {
         setFinished(true);
         setFinishRank(data.finishRank);
+        confetti({ particleCount: 150, spread: 90, origin: { y: 0.6 } });
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to record hop");
@@ -124,6 +154,15 @@ export default function RaceView({
     }
 
     await fetchArticle(toTitle);
+  }
+
+  if (countdown !== null) {
+    return (
+      <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-brand-cream">
+        <p className="font-body text-lg text-brand-navy/70">الهدف: {destinationTitle}</p>
+        <span className="font-display text-9xl text-brand-orange">{countdown}</span>
+      </div>
+    );
   }
 
   const minutes = String(Math.floor(elapsed / 60)).padStart(2, "0");
@@ -143,8 +182,8 @@ export default function RaceView({
           </div>
 
           {finished && (
-            <div className="mb-4 rounded-2xl bg-brand-orange px-5 py-4 text-center font-display text-2xl text-white shadow-md">
-              وصلت! ترتيبك: {finishRank}
+            <div className="mb-4 animate-bounce rounded-2xl bg-brand-orange px-5 py-4 text-center font-display text-2xl text-white shadow-md">
+              🎉 وصلت! ترتيبك: {finishRank}
             </div>
           )}
 

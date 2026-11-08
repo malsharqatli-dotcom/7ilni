@@ -12,6 +12,10 @@ type StartBody = {
 // only ever one possible pair) — widen to the whole deck instead.
 const MIN_POOL_FOR_VARIETY = 5;
 const RECENT_RACES_TO_AVOID = 10;
+// 5s, not 3s — testing showed even a couple hundred ms of navigation/
+// broadcast latency between "race created" and "client viewing the page"
+// can eat most of a 3s window, leaving an inconsistently short countdown.
+const COUNTDOWN_MS = 5000;
 
 function pickTwoDistinct(titles: string[], avoid: Set<string>): [string, string] | null {
   const unique = [...new Set(titles)];
@@ -81,13 +85,17 @@ export async function POST(request: NextRequest) {
   }
   const [startTitle, destinationTitle] = pair;
 
+  // started_at is set a few seconds in the future, not "now" — RaceView
+  // shows a countdown until that moment arrives, which keeps every
+  // player's countdown synchronized off one shared timestamp instead of
+  // each client just running its own independent 3-second timer.
   const { data: race, error: raceError } = await supabase
     .from("races")
     .insert({
       lobby_id: lobbyId,
       start_title: startTitle,
       destination_title: destinationTitle,
-      started_at: new Date().toISOString(),
+      started_at: new Date(Date.now() + COUNTDOWN_MS).toISOString(),
     })
     .select("id")
     .single();
