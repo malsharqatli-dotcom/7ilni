@@ -217,6 +217,7 @@ export default function RaceView({
   async function fetchArticle(title: string) {
     setLoading(true);
     setError("");
+    window.scrollTo(0, 0);
     try {
       const res = await fetch(`/api/wiki/article?title=${encodeURIComponent(title)}`);
       const data = await res.json();
