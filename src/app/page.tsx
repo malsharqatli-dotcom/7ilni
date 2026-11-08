@@ -4,7 +4,7 @@ import HomeForm from "@/components/HomeForm";
 
 export default function Home() {
   return (
-    <div className="flex min-h-screen flex-1 flex-col items-center justify-center bg-brand-cream px-4 py-10">
+    <div className="brand-bg flex min-h-screen flex-1 flex-col items-center justify-center px-4 py-10">
       <div className="flex w-full max-w-md flex-col items-center text-center">
         <Image
           src="/logo.png"
@@ -23,7 +23,7 @@ export default function Home() {
 
         <Link
           href="/daily"
-          className="mt-4 flex w-full items-center justify-center gap-2 rounded-2xl bg-brand-navy py-3 font-display text-xl text-white shadow-sm transition hover:brightness-110"
+          className="btn-secondary mt-4 flex w-full items-center justify-center gap-2 rounded-2xl py-3 font-display text-xl text-white shadow-md transition hover:brightness-110"
         >
           🔥 تحدي اليوم
         </Link>

@@ -13,7 +13,7 @@ export default async function ArticlePage(props: PageProps<"/article/[title]">) 
     if (error instanceof ArticleNotFoundError) notFound();
     if (error instanceof RateLimitedError) {
       return (
-        <div className="flex min-h-screen items-center justify-center bg-brand-cream px-4 text-center">
+        <div className="brand-bg flex min-h-screen items-center justify-center px-4 text-center">
           <p className="font-body text-brand-navy">{error.message}</p>
         </div>
       );
@@ -22,7 +22,7 @@ export default async function ArticlePage(props: PageProps<"/article/[title]">) 
   }
 
   return (
-    <div className="min-h-screen bg-brand-cream px-4 py-8">
+    <div className="brand-bg min-h-screen px-4 py-8">
       <div className="mx-auto max-w-3xl">
         <h1 className="mb-4 font-display text-3xl text-brand-navy">{article.title}</h1>
         <ArticleView html={article.html} />

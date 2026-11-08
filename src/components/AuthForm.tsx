@@ -45,13 +45,13 @@ export default function AuthForm() {
   }
 
   return (
-    <div className="w-full max-w-md rounded-3xl bg-white p-6 shadow-sm">
+    <div className="brand-card w-full max-w-md rounded-3xl bg-white p-6 shadow-md">
       <div className="flex gap-2">
         <button
           type="button"
           onClick={() => setMode("signup")}
           className={`flex-1 rounded-xl py-2 font-display text-lg transition ${
-            mode === "signup" ? "bg-brand-orange text-white" : "bg-brand-cream text-brand-navy/60"
+            mode === "signup" ? "btn-primary text-white" : "bg-brand-cream text-brand-navy/60"
           }`}
         >
           إنشاء حساب
@@ -60,7 +60,7 @@ export default function AuthForm() {
           type="button"
           onClick={() => setMode("login")}
           className={`flex-1 rounded-xl py-2 font-display text-lg transition ${
-            mode === "login" ? "bg-brand-orange text-white" : "bg-brand-cream text-brand-navy/60"
+            mode === "login" ? "btn-primary text-white" : "bg-brand-cream text-brand-navy/60"
           }`}
         >
           تسجيل الدخول
@@ -91,7 +91,7 @@ export default function AuthForm() {
         type="button"
         onClick={handleSubmit}
         disabled={pending || !email || !password}
-        className="mt-5 w-full rounded-xl bg-brand-navy py-3 font-display text-2xl text-white shadow-md transition hover:brightness-110 active:scale-[0.99] disabled:opacity-60"
+        className="btn-secondary mt-5 w-full rounded-xl py-3 font-display text-2xl text-white shadow-md transition hover:brightness-110 active:scale-[0.99] disabled:opacity-60"
       >
         {pending ? "..." : mode === "signup" ? "أنشئ حسابي" : "سجّل دخولك"}
       </button>

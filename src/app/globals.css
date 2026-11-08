@@ -64,3 +64,42 @@ body {
   max-width: 100%;
   height: auto;
 }
+
+/* Full-page background: cream base plus a faint diagonal-dash texture
+   echoing the logo's road motif, so pages read as branded rather than
+   flat empty cream. Kept low-contrast so it never competes with content. */
+.brand-bg {
+  background-color: var(--brand-cream);
+  background-image: repeating-linear-gradient(
+    135deg,
+    rgba(16, 26, 51, 0.035) 0px,
+    rgba(16, 26, 51, 0.035) 2px,
+    transparent 2px,
+    transparent 16px
+  );
+}
+
+/* A small gradient accent bar along a card's top edge so UI cards don't
+   read as flat white rectangles. Not used on the wiki article view itself,
+   which should stay neutral and readable. */
+.brand-card {
+  position: relative;
+  overflow: hidden;
+}
+
+.brand-card::before {
+  content: "";
+  position: absolute;
+  inset-inline: 0;
+  top: 0;
+  height: 4px;
+  background: linear-gradient(90deg, var(--brand-orange), var(--brand-navy));
+}
+
+.btn-primary {
+  background: linear-gradient(135deg, #ff8a4d, var(--brand-orange));
+}
+
+.btn-secondary {
+  background: linear-gradient(135deg, #253a66, var(--brand-navy));
+}

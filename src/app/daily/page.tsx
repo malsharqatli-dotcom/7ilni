@@ -6,7 +6,7 @@ export default async function DailyPage() {
 
   if (!challenge) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-brand-cream px-4 text-center">
+      <div className="brand-bg flex min-h-screen items-center justify-center px-4 text-center">
         <p className="font-body text-brand-navy">تعذّر إنشاء تحدي اليوم. حاول مرة ثانية بعد شوي.</p>
       </div>
     );

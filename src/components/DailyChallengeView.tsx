@@ -118,7 +118,7 @@ export default function DailyChallengeView({ date, startTitle, destinationTitle 
 
   if (phase === "checking") {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-brand-cream">
+      <div className="brand-bg flex min-h-screen items-center justify-center">
         <p className="font-body text-brand-navy/60">...جاري التحميل</p>
       </div>
     );
@@ -126,14 +126,14 @@ export default function DailyChallengeView({ date, startTitle, destinationTitle 
 
   if (phase === "done" && myResult) {
     return (
-      <div className="min-h-screen bg-brand-cream px-4 py-8">
+      <div className="brand-bg min-h-screen px-4 py-8">
         <div className="mx-auto max-w-md">
           <h1 className="text-center font-display text-3xl text-brand-navy">تحدي اليوم</h1>
-          <div className="mt-4 animate-bounce rounded-2xl bg-brand-orange px-5 py-4 text-center font-display text-xl text-white shadow-md">
+          <div className="btn-primary mt-4 animate-bounce rounded-2xl px-5 py-4 text-center font-display text-xl text-white shadow-md">
             🎉 خلصت! {formatTime(myResult.time_seconds)} — {myResult.hop_count} نقلة
           </div>
 
-          <div className="mt-5 rounded-2xl bg-white p-4 shadow-sm">
+          <div className="brand-card mt-5 rounded-2xl bg-white p-4 shadow-md">
             <h2 className="font-display text-lg text-brand-navy">المتصدرين اليوم</h2>
             <div className="mt-3 flex flex-col gap-2">
               {leaderboard.map((row, i) => (
@@ -155,9 +155,9 @@ export default function DailyChallengeView({ date, startTitle, destinationTitle 
   }
 
   return (
-    <div className="min-h-screen bg-brand-cream px-4 py-6">
+    <div className="brand-bg min-h-screen px-4 py-6">
       <div className="mx-auto flex max-w-3xl flex-col gap-4">
-        <div className="flex items-center justify-between rounded-2xl bg-white px-5 py-3 shadow-sm">
+        <div className="brand-card flex items-center justify-between rounded-2xl bg-white px-5 py-3 shadow-md">
           <span className="font-display text-2xl text-brand-navy">{formatTime(elapsed)}</span>
           <span className="font-body text-sm text-brand-navy/70">
             الهدف: <span className="font-bold text-brand-orange">{destinationTitle}</span>

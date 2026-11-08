@@ -68,7 +68,7 @@ export default function HomeForm() {
   }
 
   return (
-    <div className="mt-8 w-full rounded-3xl bg-white p-6 shadow-sm">
+    <div className="brand-card mt-8 w-full rounded-3xl bg-white p-6 shadow-md">
       <label htmlFor="displayName" className="block text-start font-display text-xl text-brand-navy">
         اسمك
       </label>
@@ -84,7 +84,7 @@ export default function HomeForm() {
         type="button"
         onClick={handleCreate}
         disabled={pending !== null}
-        className="mt-5 w-full rounded-xl bg-brand-orange py-3 font-display text-2xl text-white shadow-md transition hover:brightness-110 active:scale-[0.99] disabled:opacity-60"
+        className="btn-primary mt-5 w-full rounded-xl py-3 font-display text-2xl text-white shadow-md transition hover:brightness-110 active:scale-[0.99] disabled:opacity-60"
       >
         {pending === "create" ? "..." : "أنشئ غرفة جديدة"}
       </button>
@@ -107,7 +107,7 @@ export default function HomeForm() {
           type="button"
           onClick={handleJoin}
           disabled={pending !== null}
-          className="shrink-0 rounded-xl bg-brand-navy px-5 py-3 font-display text-xl text-white shadow-md transition hover:brightness-110 active:scale-[0.99] disabled:opacity-60"
+          className="btn-secondary shrink-0 rounded-xl px-5 py-3 font-display text-xl text-white shadow-md transition hover:brightness-110 active:scale-[0.99] disabled:opacity-60"
         >
           {pending === "join" ? "..." : "انضم"}
         </button>

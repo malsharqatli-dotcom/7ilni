@@ -243,7 +243,7 @@ export default function RaceView({
 
   if (countdown !== null) {
     return (
-      <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-brand-cream">
+      <div className="brand-bg flex min-h-screen flex-col items-center justify-center gap-4">
         <p className="font-body text-lg text-brand-navy/70">الهدف: {currentDestination}</p>
         <span className="font-display text-9xl text-brand-orange">{countdown}</span>
       </div>
@@ -255,10 +255,10 @@ export default function RaceView({
   const teams = isTeamsMode ? summarizeTeams(participants) : [];
 
   return (
-    <div className="min-h-screen bg-brand-cream px-4 py-6">
+    <div className="brand-bg min-h-screen px-4 py-6">
       <div className="mx-auto flex max-w-5xl flex-col gap-4 lg:flex-row">
         <div className="flex-1">
-          <div className="mb-4 flex items-center justify-between rounded-2xl bg-white px-5 py-3 shadow-sm">
+          <div className="brand-card mb-4 flex items-center justify-between rounded-2xl bg-white px-5 py-3 shadow-md">
             <span className="font-display text-2xl text-brand-navy">
               {minutes}:{seconds}
             </span>
@@ -273,7 +273,7 @@ export default function RaceView({
           </div>
 
           {finished && (
-            <div className="mb-4 animate-bounce rounded-2xl bg-brand-orange px-5 py-4 text-center font-display text-2xl text-white shadow-md">
+            <div className="btn-primary mb-4 animate-bounce rounded-2xl px-5 py-4 text-center font-display text-2xl text-white shadow-md">
               🎉 {isTeamsMode ? `فريقك وصل! الترتيب: ${finishRank}` : `وصلت! ترتيبك: ${finishRank}`}
             </div>
           )}
@@ -289,7 +289,7 @@ export default function RaceView({
         </div>
 
         <div className="w-full shrink-0 lg:w-64">
-          <div className="rounded-2xl bg-white p-4 shadow-sm">
+          <div className="brand-card rounded-2xl bg-white p-4 shadow-md">
             <h2 className="font-display text-lg text-brand-navy">الترتيب</h2>
             <div className="mt-3 flex flex-col gap-2">
               {isTeamsMode

@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { RealtimeChannel } from "@supabase/supabase-js";
@@ -334,8 +335,10 @@ export default function LobbyRoom({ lobbyId, joinCode, maxPlayers }: LobbyRoomPr
     mode === "teams" ? members.every((m) => !!m.teamName) : pairingMode === "random" || manualValid;
 
   return (
-    <div className="flex min-h-screen flex-1 flex-col items-center bg-brand-cream px-4 py-8">
+    <div className="brand-bg flex min-h-screen flex-1 flex-col items-center px-4 py-8">
       <div className="flex w-full max-w-md flex-col gap-5">
+        <Image src="/logo.png" alt="حلّني" width={1536} height={1024} className="h-auto w-32 max-w-full self-center" />
+
         <div className="flex items-center justify-between">
           <div>
             <p className="font-body text-xs font-semibold text-brand-navy/60">كود الغرفة</p>
@@ -350,7 +353,7 @@ export default function LobbyRoom({ lobbyId, joinCode, maxPlayers }: LobbyRoomPr
           </button>
         </div>
 
-        <div className="rounded-3xl bg-white p-5 shadow-sm">
+        <div className="brand-card rounded-3xl bg-white p-5 shadow-md">
           <h2 className="font-display text-lg text-brand-navy">طريقة اللعب</h2>
           <div className="mt-2 flex gap-2">
             <button
@@ -526,7 +529,7 @@ export default function LobbyRoom({ lobbyId, joinCode, maxPlayers }: LobbyRoomPr
           )}
         </div>
 
-        <div className="rounded-3xl bg-white p-5 shadow-sm">
+        <div className="brand-card rounded-3xl bg-white p-5 shadow-md">
           <h2 className="font-display text-lg text-brand-navy">اللاعبين</h2>
           <div className="mt-3 flex flex-wrap gap-2">
             {members.length === 0 && (
@@ -553,7 +556,7 @@ export default function LobbyRoom({ lobbyId, joinCode, maxPlayers }: LobbyRoomPr
               type="button"
               onClick={handleStart}
               disabled={starting || !canStart}
-              className="w-full rounded-2xl bg-brand-orange py-4 font-display text-2xl text-white shadow-xl transition hover:brightness-110 active:scale-[0.99] disabled:opacity-60"
+              className="btn-primary w-full rounded-2xl py-4 font-display text-2xl text-white shadow-xl transition hover:brightness-110 active:scale-[0.99] disabled:opacity-60"
             >
               {starting ? "..." : `ابدأ السباق (${members.length}/${maxPlayers})`}
             </button>
