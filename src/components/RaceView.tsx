@@ -1,10 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import confetti from "canvas-confetti";
 import ArticleView from "@/components/ArticleView";
 import { supabase } from "@/lib/supabase/client";
-import { getAuthHeader } from "@/lib/auth/session";
+import { ensureUserId, getAuthHeader } from "@/lib/auth/session";
 
 type Participant = {
   user_id: string;
@@ -12,13 +12,19 @@ type Participant = {
   status: "racing" | "finished" | "surrendered";
   hop_count: number;
   finish_rank: number | null;
+  team_name: string | null;
+  current_stage_index: number;
+  current_title: string;
 };
+
+type StagePair = { start: string; destination: string };
 
 type RaceViewProps = {
   raceId: string;
   startTitle: string;
   destinationTitle: string;
   startedAt: string;
+  stagePairs: StagePair[] | null;
   initialParticipants: Participant[];
 };
 
@@ -33,24 +39,74 @@ function sortParticipants(list: Participant[]): Participant[] {
   });
 }
 
+function summarizeTeams(list: Participant[]) {
+  const teams = new Map<string, { teamName: string; stageIndex: number; finished: boolean; finishRank: number | null; members: Participant[] }>();
+  for (const p of list) {
+    if (!p.team_name) continue;
+    const entry = teams.get(p.team_name) ?? {
+      teamName: p.team_name,
+      stageIndex: p.current_stage_index,
+      finished: false,
+      finishRank: null,
+      members: [],
+    };
+    entry.members.push(p);
+    entry.stageIndex = Math.max(entry.stageIndex, p.current_stage_index);
+    if (p.status === "finished") {
+      entry.finished = true;
+      entry.finishRank = p.finish_rank;
+    }
+    teams.set(p.team_name, entry);
+  }
+  return [...teams.values()].sort((a, b) => {
+    if (a.finished && b.finished) return (a.finishRank ?? 0) - (b.finishRank ?? 0);
+    if (a.finished) return -1;
+    if (b.finished) return 1;
+    return b.stageIndex - a.stageIndex;
+  });
+}
+
 export default function RaceView({
   raceId,
   startTitle,
   destinationTitle,
   startedAt,
+  stagePairs,
   initialParticipants,
 }: RaceViewProps) {
+  const isTeamsMode = !!stagePairs;
+  const [myUserId, setMyUserId] = useState<string | null>(null);
   const [countdown, setCountdown] = useState<number | null>(null);
   const [raceStarted, setRaceStarted] = useState(false);
   const [currentTitle, setCurrentTitle] = useState(startTitle);
   const [articleTitle, setArticleTitle] = useState(startTitle);
   const [articleHtml, setArticleHtml] = useState("");
   const [loading, setLoading] = useState(true);
-  const [finished, setFinished] = useState(false);
-  const [finishRank, setFinishRank] = useState<number | null>(null);
+  const [localFinished, setLocalFinished] = useState(false);
+  const [localFinishRank, setLocalFinishRank] = useState<number | null>(null);
   const [participants, setParticipants] = useState<Participant[]>(initialParticipants);
   const [elapsed, setElapsed] = useState(0);
   const [error, setError] = useState("");
+  const confettiFiredRef = useRef(false);
+  const lastSyncedStageRef = useRef(0);
+
+  // In teams mode, my own progress is whatever the DB says for my row —
+  // it can change because of my own hop OR a teammate finishing a stage,
+  // so it's derived from the realtime-synced participants list rather
+  // than mirrored into separate local state. localFinished/localFinishRank
+  // give instant feedback for the hop that caused it (own click, either
+  // mode), ahead of the realtime echo confirming the same thing.
+  const myParticipant = isTeamsMode ? participants.find((p) => p.user_id === myUserId) ?? null : null;
+  const myStageIndex = myParticipant?.current_stage_index ?? 0;
+  const teamFinished = isTeamsMode && myParticipant?.status === "finished";
+  const finished = localFinished || teamFinished;
+  const finishRank = localFinishRank ?? (teamFinished ? myParticipant!.finish_rank : null);
+
+  const currentDestination = isTeamsMode ? stagePairs![myStageIndex].destination : destinationTitle;
+
+  useEffect(() => {
+    ensureUserId().then(setMyUserId);
+  }, []);
 
   // started_at is a few seconds in the future (set by /api/race/start) so
   // every player's countdown is synced off the same timestamp, instead of
@@ -111,6 +167,29 @@ export default function RaceView({
     };
   }, [raceId]);
 
+  // Fires once per race regardless of mode or who triggered the finish —
+  // in teams mode this also covers a teammate finishing the last stage
+  // (their RPC call bumps my row's status, `finished` flips, this runs).
+  useEffect(() => {
+    if (!finished || confettiFiredRef.current) return;
+    confettiFiredRef.current = true;
+    confetti({ particleCount: 150, spread: 90, origin: { y: 0.6 } });
+  }, [finished]);
+
+  // Teams mode: a teammate finishing the current stage bumps everyone's
+  // row server-side (see advance_team_stage RPC) — this effect is what
+  // makes MY view follow along when I wasn't the one who triggered it.
+  useEffect(() => {
+    if (!isTeamsMode || finished) return;
+    if (myStageIndex > lastSyncedStageRef.current) {
+      lastSyncedStageRef.current = myStageIndex;
+      const nextStart = stagePairs![myStageIndex].start;
+      setCurrentTitle(nextStart);
+      fetchArticle(nextStart);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isTeamsMode, myStageIndex, finished]);
+
   async function fetchArticle(title: string) {
     setLoading(true);
     setError("");
@@ -141,11 +220,17 @@ export default function RaceView({
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Failed to record hop");
 
+      if (data.stageAdvanced) {
+        lastSyncedStageRef.current = data.nextStageIndex;
+        setCurrentTitle(data.nextStageStart);
+        await fetchArticle(data.nextStageStart);
+        return;
+      }
+
       setCurrentTitle(toTitle);
       if (data.finished) {
-        setFinished(true);
-        setFinishRank(data.finishRank);
-        confetti({ particleCount: 150, spread: 90, origin: { y: 0.6 } });
+        setLocalFinished(true);
+        setLocalFinishRank(data.finishRank);
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to record hop");
@@ -159,7 +244,7 @@ export default function RaceView({
   if (countdown !== null) {
     return (
       <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-brand-cream">
-        <p className="font-body text-lg text-brand-navy/70">الهدف: {destinationTitle}</p>
+        <p className="font-body text-lg text-brand-navy/70">الهدف: {currentDestination}</p>
         <span className="font-display text-9xl text-brand-orange">{countdown}</span>
       </div>
     );
@@ -167,6 +252,7 @@ export default function RaceView({
 
   const minutes = String(Math.floor(elapsed / 60)).padStart(2, "0");
   const seconds = String(elapsed % 60).padStart(2, "0");
+  const teams = isTeamsMode ? summarizeTeams(participants) : [];
 
   return (
     <div className="min-h-screen bg-brand-cream px-4 py-6">
@@ -176,14 +262,19 @@ export default function RaceView({
             <span className="font-display text-2xl text-brand-navy">
               {minutes}:{seconds}
             </span>
+            {isTeamsMode && (
+              <span className="font-body text-sm text-brand-navy/70">
+                المرحلة {myStageIndex + 1}/{stagePairs!.length}
+              </span>
+            )}
             <span className="font-body text-sm text-brand-navy/70">
-              الهدف: <span className="font-bold text-brand-orange">{destinationTitle}</span>
+              الهدف: <span className="font-bold text-brand-orange">{currentDestination}</span>
             </span>
           </div>
 
           {finished && (
             <div className="mb-4 animate-bounce rounded-2xl bg-brand-orange px-5 py-4 text-center font-display text-2xl text-white shadow-md">
-              🎉 وصلت! ترتيبك: {finishRank}
+              🎉 {isTeamsMode ? `فريقك وصل! الترتيب: ${finishRank}` : `وصلت! ترتيبك: ${finishRank}`}
             </div>
           )}
 
@@ -201,17 +292,31 @@ export default function RaceView({
           <div className="rounded-2xl bg-white p-4 shadow-sm">
             <h2 className="font-display text-lg text-brand-navy">الترتيب</h2>
             <div className="mt-3 flex flex-col gap-2">
-              {sortParticipants(participants).map((p, i) => (
-                <div
-                  key={p.user_id}
-                  className="flex items-center justify-between rounded-xl bg-brand-cream px-3 py-2 font-body text-sm text-brand-navy"
-                >
-                  <span className="flex items-center gap-1.5">
-                    {p.status === "finished" ? "🏁" : `${i + 1}.`} {p.display_name}
-                  </span>
-                  <span className="text-brand-navy/60">{p.hop_count} نقلة</span>
-                </div>
-              ))}
+              {isTeamsMode
+                ? teams.map((t, i) => (
+                    <div
+                      key={t.teamName}
+                      className="flex items-center justify-between rounded-xl bg-brand-cream px-3 py-2 font-body text-sm text-brand-navy"
+                    >
+                      <span className="flex items-center gap-1.5">
+                        {t.finished ? "🏁" : `${i + 1}.`} {t.teamName}
+                      </span>
+                      <span className="text-brand-navy/60">
+                        {t.finished ? `#${t.finishRank}` : `مرحلة ${t.stageIndex + 1}/${stagePairs!.length}`}
+                      </span>
+                    </div>
+                  ))
+                : sortParticipants(participants).map((p, i) => (
+                    <div
+                      key={p.user_id}
+                      className="flex items-center justify-between rounded-xl bg-brand-cream px-3 py-2 font-body text-sm text-brand-navy"
+                    >
+                      <span className="flex items-center gap-1.5">
+                        {p.status === "finished" ? "🏁" : `${i + 1}.`} {p.display_name}
+                      </span>
+                      <span className="text-brand-navy/60">{p.hop_count} نقلة</span>
+                    </div>
+                  ))}
             </div>
           </div>
         </div>

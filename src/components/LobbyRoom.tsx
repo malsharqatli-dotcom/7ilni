@@ -11,6 +11,7 @@ type Member = {
   userId: string;
   displayName: string;
   isHost: boolean;
+  teamName: string | null;
 };
 
 type Deck = {
@@ -32,19 +33,29 @@ const DIFFICULTIES: { id: "easy" | "medium" | "hard"; label: string }[] = [
   { id: "hard", label: "صعب" },
 ];
 
+const TEAMS = ["الفريق الأول", "الفريق الثاني"];
+const STAGE_COUNTS = [2, 3, 4, 5];
+
 export default function LobbyRoom({ lobbyId, joinCode, maxPlayers }: LobbyRoomProps) {
   const router = useRouter();
   const [userId, setUserId] = useState<string | null>(null);
   const [members, setMembers] = useState<Member[]>([]);
   const [decks, setDecks] = useState<Deck[]>([]);
+  const [mode, setMode] = useState<"ffa" | "teams">("ffa");
   const [difficulty, setDifficulty] = useState<"easy" | "medium" | "hard">("medium");
   const [deckId, setDeckId] = useState<string | null>(null);
+  const [stageCount, setStageCount] = useState(3);
   const [starting, setStarting] = useState(false);
   const [error, setError] = useState("");
   const channelRef = useRef<RealtimeChannel | null>(null);
+  const selfRef = useRef<Member | null>(null);
 
-  const self = members.find((m) => m.userId === userId);
+  const self = members.find((m) => m.userId === userId) ?? null;
   const isHost = self?.isHost ?? false;
+
+  useEffect(() => {
+    selfRef.current = self;
+  }, [self]);
 
   useEffect(() => {
     ensureUserId().then(setUserId);
@@ -61,13 +72,14 @@ export default function LobbyRoom({ lobbyId, joinCode, maxPlayers }: LobbyRoomPr
   }, []);
 
   const joinRaceAsParticipant = useCallback(
-    async (raceId: string, startTitle: string) => {
+    async (raceId: string, startTitle: string, teamName: string | null) => {
       if (!userId) return;
       await supabase.from("race_participants").insert({
         race_id: raceId,
         user_id: userId,
         display_name: getDisplayName(),
         current_title: startTitle,
+        team_name: teamName,
       });
       router.push(`/race/${raceId}`);
     },
@@ -87,11 +99,14 @@ export default function LobbyRoom({ lobbyId, joinCode, maxPlayers }: LobbyRoomPr
         const state = channel.presenceState<Member>();
         const list = Object.values(state)
           .flat()
-          .map((m) => ({ userId: m.userId, displayName: m.displayName, isHost: m.isHost }));
+          .map((m) => ({ userId: m.userId, displayName: m.displayName, isHost: m.isHost, teamName: m.teamName ?? null }));
         setMembers(list);
       })
       .on("broadcast", { event: "race_start" }, ({ payload }) => {
-        joinRaceAsParticipant(payload.raceId, payload.startTitle);
+        // selfRef, not the `self` captured when this effect first ran —
+        // the channel subscribes once, but the player's team pick can
+        // change after that, so the closure here must read the latest.
+        joinRaceAsParticipant(payload.raceId, payload.startTitle, selfRef.current?.teamName ?? null);
       })
       .subscribe(async (status) => {
         if (status !== "SUBSCRIBED") return;
@@ -101,7 +116,7 @@ export default function LobbyRoom({ lobbyId, joinCode, maxPlayers }: LobbyRoomPr
         // tracking twice, which raced the channel's subscribe handshake.
         const { data } = await supabase
           .from("lobby_members")
-          .select("is_host")
+          .select("is_host, team_name")
           .eq("lobby_id", lobbyId)
           .eq("user_id", userId)
           .single();
@@ -110,6 +125,7 @@ export default function LobbyRoom({ lobbyId, joinCode, maxPlayers }: LobbyRoomPr
           userId,
           displayName: getDisplayName(),
           isHost: data?.is_host ?? false,
+          teamName: data?.team_name ?? null,
         });
       });
 
@@ -118,6 +134,17 @@ export default function LobbyRoom({ lobbyId, joinCode, maxPlayers }: LobbyRoomPr
     };
   }, [lobbyId, userId, joinRaceAsParticipant]);
 
+  async function handlePickTeam(teamName: string) {
+    if (!userId) return;
+    await supabase.from("lobby_members").update({ team_name: teamName }).eq("lobby_id", lobbyId).eq("user_id", userId);
+    await channelRef.current?.track({
+      userId,
+      displayName: getDisplayName(),
+      isHost,
+      teamName,
+    });
+  }
+
   async function handleStart() {
     setError("");
     setStarting(true);
@@ -125,7 +152,7 @@ export default function LobbyRoom({ lobbyId, joinCode, maxPlayers }: LobbyRoomPr
       const res = await fetch("/api/race/start", {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: await getAuthHeader() },
-        body: JSON.stringify({ lobbyId, difficulty, deckId }),
+        body: JSON.stringify({ lobbyId, mode, difficulty, deckId, stageCount }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Failed to start race");
@@ -135,12 +162,14 @@ export default function LobbyRoom({ lobbyId, joinCode, maxPlayers }: LobbyRoomPr
         event: "race_start",
         payload: { raceId: data.raceId, startTitle: data.startTitle },
       });
-      await joinRaceAsParticipant(data.raceId, data.startTitle);
+      await joinRaceAsParticipant(data.raceId, data.startTitle, self?.teamName ?? null);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to start race");
       setStarting(false);
     }
   }
+
+  const canStart = mode === "ffa" || members.every((m) => !!m.teamName);
 
   return (
     <div className="flex min-h-screen flex-1 flex-col items-center bg-brand-cream px-4 py-8">
@@ -160,7 +189,65 @@ export default function LobbyRoom({ lobbyId, joinCode, maxPlayers }: LobbyRoomPr
         </div>
 
         <div className="rounded-3xl bg-white p-5 shadow-sm">
-          <h2 className="font-display text-lg text-brand-navy">مستوى الصعوبة</h2>
+          <h2 className="font-display text-lg text-brand-navy">طريقة اللعب</h2>
+          <div className="mt-2 flex gap-2">
+            <button
+              type="button"
+              onClick={() => setMode("ffa")}
+              className={`flex-1 rounded-xl py-2 font-display text-base transition ${
+                mode === "ffa" ? "bg-brand-orange text-white shadow-md" : "bg-brand-cream text-brand-navy/70"
+              }`}
+            >
+              فردي (الكل ضد الكل)
+            </button>
+            <button
+              type="button"
+              onClick={() => setMode("teams")}
+              className={`flex-1 rounded-xl py-2 font-display text-base transition ${
+                mode === "teams" ? "bg-brand-orange text-white shadow-md" : "bg-brand-cream text-brand-navy/70"
+              }`}
+            >
+              فرق
+            </button>
+          </div>
+
+          {mode === "teams" && (
+            <>
+              <h2 className="mt-5 font-display text-lg text-brand-navy">فريقك</h2>
+              <div className="mt-2 flex gap-2">
+                {TEAMS.map((team) => (
+                  <button
+                    key={team}
+                    type="button"
+                    onClick={() => handlePickTeam(team)}
+                    className={`flex-1 rounded-xl py-2 font-body text-sm font-semibold transition ${
+                      self?.teamName === team ? "bg-brand-navy text-white shadow-md" : "bg-brand-cream text-brand-navy/70"
+                    }`}
+                  >
+                    {team}
+                  </button>
+                ))}
+              </div>
+
+              <h2 className="mt-5 font-display text-lg text-brand-navy">كم مرحلة؟</h2>
+              <div className="mt-2 flex gap-2">
+                {STAGE_COUNTS.map((count) => (
+                  <button
+                    key={count}
+                    type="button"
+                    onClick={() => setStageCount(count)}
+                    className={`flex-1 rounded-xl py-2 font-display text-base transition ${
+                      stageCount === count ? "bg-brand-orange text-white shadow-md" : "bg-brand-cream text-brand-navy/70"
+                    }`}
+                  >
+                    {count}
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
+
+          <h2 className="mt-5 font-display text-lg text-brand-navy">مستوى الصعوبة</h2>
           <div className="mt-2 flex gap-2">
             {DIFFICULTIES.map((d) => (
               <button
@@ -210,20 +297,30 @@ export default function LobbyRoom({ lobbyId, joinCode, maxPlayers }: LobbyRoomPr
               >
                 {m.isHost && <span>👑</span>}
                 {m.displayName}
+                {mode === "teams" && m.teamName && (
+                  <span className="text-white/60">· {m.teamName}</span>
+                )}
               </span>
             ))}
           </div>
         </div>
 
         {isHost ? (
-          <button
-            type="button"
-            onClick={handleStart}
-            disabled={starting}
-            className="w-full rounded-2xl bg-brand-orange py-4 font-display text-2xl text-white shadow-xl transition hover:brightness-110 active:scale-[0.99] disabled:opacity-60"
-          >
-            {starting ? "..." : `ابدأ السباق (${members.length}/${maxPlayers})`}
-          </button>
+          <>
+            <button
+              type="button"
+              onClick={handleStart}
+              disabled={starting || !canStart}
+              className="w-full rounded-2xl bg-brand-orange py-4 font-display text-2xl text-white shadow-xl transition hover:brightness-110 active:scale-[0.99] disabled:opacity-60"
+            >
+              {starting ? "..." : `ابدأ السباق (${members.length}/${maxPlayers})`}
+            </button>
+            {!canStart && (
+              <p className="text-center font-body text-sm text-brand-navy/60">
+                لازم كل اللاعبين يختاروا فريق قبل البدء
+              </p>
+            )}
+          </>
         ) : (
           <p className="text-center font-body text-sm text-brand-navy/60">
             بانتظار المضيف يبدأ السباق...

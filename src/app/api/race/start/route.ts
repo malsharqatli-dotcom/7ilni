@@ -3,8 +3,10 @@ import { createAuthedClient } from "@/lib/supabase/server";
 
 type StartBody = {
   lobbyId?: string;
+  mode?: "ffa" | "teams";
   difficulty?: "easy" | "medium" | "hard";
   deckId?: string;
+  stageCount?: number;
 };
 
 // Below this many candidates, a deck+difficulty combo doesn't have enough
@@ -37,7 +39,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Not signed in" }, { status: 401 });
   }
 
-  const { lobbyId, difficulty, deckId } = (await request.json()) as StartBody;
+  const { lobbyId, mode, difficulty, deckId, stageCount } = (await request.json()) as StartBody;
   if (!lobbyId) {
     return NextResponse.json({ error: "Missing lobbyId" }, { status: 400 });
   }
@@ -79,11 +81,17 @@ export async function POST(request: NextRequest) {
     .limit(RECENT_RACES_TO_AVOID);
   const avoid = new Set((recentRaces ?? []).flatMap((r) => [r.start_title, r.destination_title]));
 
-  const pair = pickTwoDistinct(candidates, avoid);
-  if (!pair) {
-    return NextResponse.json({ error: "Not enough articles available for this pick" }, { status: 422 });
+  const isTeams = mode === "teams";
+  const stagesNeeded = isTeams ? Math.max(2, Math.min(5, stageCount ?? 3)) : 1;
+
+  const stagePairs: { start: string; destination: string }[] = [];
+  for (let i = 0; i < stagesNeeded; i++) {
+    const pair = pickTwoDistinct(candidates, avoid);
+    if (!pair) {
+      return NextResponse.json({ error: "Not enough articles available for this pick" }, { status: 422 });
+    }
+    stagePairs.push({ start: pair[0], destination: pair[1] });
   }
-  const [startTitle, destinationTitle] = pair;
 
   // started_at is set a few seconds in the future, not "now" — RaceView
   // shows a countdown until that moment arrives, which keeps every
@@ -93,8 +101,9 @@ export async function POST(request: NextRequest) {
     .from("races")
     .insert({
       lobby_id: lobbyId,
-      start_title: startTitle,
-      destination_title: destinationTitle,
+      start_title: stagePairs[0].start,
+      destination_title: stagePairs[0].destination,
+      stage_pairs: isTeams ? stagePairs : null,
       started_at: new Date(Date.now() + COUNTDOWN_MS).toISOString(),
     })
     .select("id")
@@ -106,5 +115,5 @@ export async function POST(request: NextRequest) {
 
   await supabase.from("lobbies").update({ status: "in_progress" }).eq("id", lobbyId);
 
-  return NextResponse.json({ raceId: race.id, startTitle });
+  return NextResponse.json({ raceId: race.id, startTitle: stagePairs[0].start });
 }
