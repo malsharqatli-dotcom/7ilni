@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
+import * as cheerio from "cheerio";
 import { createAuthedClient } from "@/lib/supabase/server";
+import { getArticle } from "@/lib/wiki/fetch-article";
 
 type StartBody = {
   lobbyId?: string;
@@ -32,6 +34,47 @@ function pickTwoDistinct(titles: string[], avoid: Set<string>): [string, string]
   return [shuffled[0], shuffled[1]];
 }
 
+// A pair where the destination happens to sit as a direct in-article link
+// on the start page solves in a single click regardless of either
+// article's own difficulty tier (e.g. neighboring countries' articles
+// routinely link straight to each other) — difficulty scoring is about
+// each article's own length/link density, not the graph distance between
+// a specific pair, so it can't catch this on its own. Reusing getArticle
+// means this is normally a cache hit (the pool is pre-warmed), not a live
+// Wikipedia fetch on every race start.
+const MAX_PAIR_REROLLS = 8;
+
+async function isDirectLink(fromTitle: string, toTitle: string): Promise<boolean> {
+  try {
+    const article = await getArticle(fromTitle);
+    const target = toTitle.trim().toLowerCase();
+    const $ = cheerio.load(article.html);
+    let found = false;
+    $("[data-wiki-title]").each((_, el) => {
+      if (($(el).attr("data-wiki-title") ?? "").trim().toLowerCase() === target) found = true;
+    });
+    return found;
+  } catch {
+    // Can't verify (rare fetch failure) — don't block race creation over
+    // a quality heuristic, just accept the pair as picked.
+    return false;
+  }
+}
+
+async function pickNonTrivialPair(titles: string[], avoid: Set<string>): Promise<[string, string] | null> {
+  let lastPair: [string, string] | null = null;
+  for (let attempt = 0; attempt < MAX_PAIR_REROLLS; attempt++) {
+    const pair = pickTwoDistinct(titles, avoid);
+    if (!pair) return null;
+    lastPair = pair;
+    if (!(await isDirectLink(pair[0], pair[1]))) return pair;
+  }
+  // Exhausted re-rolls — small pool, or these articles are just heavily
+  // interlinked. A direct-link pair is still a valid race, just an easy
+  // one; better than failing to create a race at all.
+  return lastPair;
+}
+
 export async function POST(request: NextRequest) {
   const supabase = createAuthedClient(request.headers.get("authorization"));
   const {
@@ -58,23 +101,33 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Manual picks aren't supported in teams mode" }, { status: 400 });
     }
     if (manualStart.trim().toLowerCase() === manualDestination.trim().toLowerCase()) {
-      return NextResponse.json({ error: "Start and destination must be different articles" }, { status: 400 });
+      return NextResponse.json({ error: "لازم تختار مقالة بداية ونهاية مختلفتين عن بعض" }, { status: 400 });
     }
 
-    const { data: validTitles } = await supabase
-      .from("article_metadata")
-      .select("title")
-      .in("title", [manualStart, manualDestination]);
-    if ((validTitles ?? []).length !== 2) {
-      return NextResponse.json({ error: "Unknown article title" }, { status: 422 });
+    // Case-insensitive match against the scored pool, rather than an exact
+    // .in() — free-typed text that doesn't exactly match the stored casing
+    // (most likely if someone typed instead of picking a dropdown
+    // suggestion) still resolves correctly here, using the pool's own
+    // canonical casing for the race rather than whatever the player typed.
+    const [{ data: startMatch }, { data: destMatch }] = await Promise.all([
+      supabase.from("article_metadata").select("title").ilike("title", manualStart.trim()).limit(1).maybeSingle(),
+      supabase.from("article_metadata").select("title").ilike("title", manualDestination.trim()).limit(1).maybeSingle(),
+    ]);
+    if (!startMatch || !destMatch) {
+      return NextResponse.json(
+        { error: "لازم تختار المقالة من القائمة المنسدلة وهي بتكتب، أو تستخدم زر 🎲" },
+        { status: 422 },
+      );
     }
+    const resolvedStart = startMatch.title;
+    const resolvedDestination = destMatch.title;
 
     const { data: race, error: raceError } = await supabase
       .from("races")
       .insert({
         lobby_id: lobbyId,
-        start_title: manualStart,
-        destination_title: manualDestination,
+        start_title: resolvedStart,
+        destination_title: resolvedDestination,
         stage_pairs: null,
         started_at: new Date(Date.now() + COUNTDOWN_MS).toISOString(),
       })
@@ -86,7 +139,7 @@ export async function POST(request: NextRequest) {
     }
 
     await supabase.from("lobbies").update({ status: "in_progress" }).eq("id", lobbyId);
-    return NextResponse.json({ raceId: race.id, startTitle: manualStart });
+    return NextResponse.json({ raceId: race.id, startTitle: resolvedStart });
   }
 
   let candidates: string[] = [];
@@ -130,7 +183,7 @@ export async function POST(request: NextRequest) {
 
   const stagePairs: { start: string; destination: string }[] = [];
   for (let i = 0; i < stagesNeeded; i++) {
-    const pair = pickTwoDistinct(candidates, avoid);
+    const pair = await pickNonTrivialPair(candidates, avoid);
     if (!pair) {
       return NextResponse.json({ error: "Not enough articles available for this pick" }, { status: 422 });
     }

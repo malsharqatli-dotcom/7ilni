@@ -7,7 +7,9 @@ import ArticleView from "@/components/ArticleView";
 import { supabase } from "@/lib/supabase/client";
 import { ensureUserId, getAuthHeader } from "@/lib/auth/session";
 
-const RETURN_TO_LOBBY_DELAY_MS = 5000;
+// Long enough to read the winning path (several hops), not just the
+// one-line finish banner the previous shorter delay was tuned for.
+const RETURN_TO_LOBBY_DELAY_MS = 9000;
 
 type Participant = {
   user_id: string;
@@ -93,6 +95,7 @@ export default function RaceView({
   const [participants, setParticipants] = useState<Participant[]>(initialParticipants);
   const [elapsed, setElapsed] = useState(0);
   const [error, setError] = useState("");
+  const [winnerPath, setWinnerPath] = useState<string[] | null>(null);
   const confettiFiredRef = useRef(false);
   const lastSyncedStageRef = useRef(0);
 
@@ -114,10 +117,16 @@ export default function RaceView({
   // decided — every connected client sees this via the same realtime
   // participants subscription everything else here already relies on.
   const teams = isTeamsMode ? summarizeTeams(participants) : [];
+  const winningTeam = isTeamsMode ? teams.find((t) => t.finished && t.finishRank === 1) ?? null : null;
   const winnerName = isTeamsMode
-    ? teams.find((t) => t.finished && t.finishRank === 1)?.teamName ?? null
+    ? winningTeam?.teamName ?? null
     : participants.find((p) => p.status === "finished" && p.finish_rank === 1)?.display_name ?? null;
   const raceOver = winnerName !== null;
+  const winnerUserIds = isTeamsMode
+    ? (winningTeam?.members.map((m) => m.user_id) ?? [])
+    : [participants.find((p) => p.status === "finished" && p.finish_rank === 1)?.user_id].filter(
+        (id): id is string => !!id,
+      );
 
   useEffect(() => {
     ensureUserId().then(setMyUserId);
@@ -182,6 +191,24 @@ export default function RaceView({
     };
   }, [raceId]);
 
+  // Safety net alongside realtime: mobile browsers can silently drop the
+  // websocket (screen lock, backgrounding, a Wi-Fi hiccup) without any
+  // visible error, and postgres_changes only pushes live events — it
+  // doesn't replay what was missed while disconnected. A plain poll every
+  // few seconds guarantees standings catch up regardless of what the
+  // websocket is doing, at the cost of a small, constant read load.
+  useEffect(() => {
+    if (!raceStarted || raceOver) return;
+    const interval = setInterval(async () => {
+      const { data } = await supabase
+        .from("race_participants")
+        .select("user_id, display_name, status, hop_count, finish_rank, team_name, current_stage_index, current_title")
+        .eq("race_id", raceId);
+      if (data) setParticipants(data as Participant[]);
+    }, 3000);
+    return () => clearInterval(interval);
+  }, [raceId, raceStarted, raceOver]);
+
   // Fires once per race regardless of mode or who triggered the finish —
   // in teams mode this also covers a teammate finishing the last stage
   // (their RPC call bumps my row's status, `finished` flips, this runs).
@@ -213,6 +240,32 @@ export default function RaceView({
     const timeout = setTimeout(() => router.push(`/lobby/${joinCode}`), RETURN_TO_LOBBY_DELAY_MS);
     return () => clearTimeout(timeout);
   }, [raceOver, joinCode, router]);
+
+  // race_hops is an append-only per-hop log (race_id, user_id, from_title,
+  // to_title) that's existed since the first migration for exactly this —
+  // once a winner is known, replay their (or in teams mode, their whole
+  // team's) hops in chronological order to show the path they actually
+  // took. bigserial `id` gives a stable global order even across multiple
+  // teammates who each logged their own hops at different times.
+  useEffect(() => {
+    if (!raceOver || winnerUserIds.length === 0) return;
+    let cancelled = false;
+    supabase
+      .from("race_hops")
+      .select("from_title, to_title, user_id")
+      .eq("race_id", raceId)
+      .in("user_id", winnerUserIds)
+      .order("id", { ascending: true })
+      .then(({ data }) => {
+        if (cancelled || !data || data.length === 0) return;
+        const path = [data[0].from_title, ...data.map((hop) => hop.to_title)];
+        setWinnerPath(path);
+      });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [raceOver, raceId]);
 
   async function fetchArticle(title: string) {
     setLoading(true);
@@ -314,6 +367,30 @@ export default function RaceView({
             <div className="mb-4 rounded-2xl bg-brand-navy px-5 py-4 text-center font-display text-2xl text-white shadow-md">
               🏆 فاز {winnerName}!
               <p className="mt-1 font-body text-sm font-normal opacity-90">جاري الرجوع للغرفة...</p>
+            </div>
+          )}
+
+          {raceOver && winnerPath && (
+            <div className="brand-card mb-4 rounded-2xl bg-white p-4 shadow-md">
+              <h3 className="mb-2 font-display text-base text-brand-navy">مسار الفوز</h3>
+              <div dir="ltr" className="flex flex-wrap items-center gap-2">
+                {winnerPath.map((title, i) => (
+                  <span key={i} className="flex items-center gap-2">
+                    <span
+                      className={`rounded-full px-3 py-1 font-body text-sm ${
+                        i === winnerPath.length - 1
+                          ? "btn-primary text-white"
+                          : i === 0
+                            ? "bg-brand-navy text-white"
+                            : "bg-brand-cream text-brand-navy"
+                      }`}
+                    >
+                      {title}
+                    </span>
+                    {i < winnerPath.length - 1 && <span className="text-brand-navy/40">→</span>}
+                  </span>
+                ))}
+              </div>
             </div>
           )}
 

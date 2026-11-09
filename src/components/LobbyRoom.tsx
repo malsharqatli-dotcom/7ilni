@@ -56,6 +56,7 @@ function ArticlePicker({
   const [suggestions, setSuggestions] = useState<ArticleSuggestion[]>([]);
   const [open, setOpen] = useState(false);
   const [rolling, setRolling] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
 
   // Debounced search-as-you-type against the scored article pool — this
   // effect reacts to the query changing, not to something derivable at
@@ -69,6 +70,27 @@ function ArticlePicker({
     }, 250);
     return () => clearTimeout(timeout);
   }, [query]);
+
+  // Closes on any tap/click outside the picker. Deliberately not an
+  // onBlur on the input: on touch devices, tapping a suggestion blurs
+  // the input (and would close the list) before the tap finishes
+  // registering as a click, so the suggestion's own onClick never fires —
+  // the dropdown silently does nothing on mobile. A document-level
+  // listener sidesteps that race entirely.
+  useEffect(() => {
+    if (!open) return;
+    function handleOutside(e: MouseEvent | TouchEvent) {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleOutside);
+    document.addEventListener("touchstart", handleOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleOutside);
+      document.removeEventListener("touchstart", handleOutside);
+    };
+  }, [open]);
 
   const visibleSuggestions = query.trim().length < 2 ? [] : suggestions;
 
@@ -90,7 +112,7 @@ function ArticlePicker({
   }
 
   return (
-    <div className="relative flex-1">
+    <div ref={containerRef} className="relative flex-1">
       <label className="font-body text-xs font-semibold text-brand-navy/60">{label}</label>
       <div className="mt-1 flex gap-1.5">
         <input
@@ -99,9 +121,9 @@ function ArticlePicker({
           onChange={(e) => {
             setQuery(e.target.value);
             onChange(e.target.value);
+            setOpen(true);
           }}
           onFocus={() => setOpen(true)}
-          onBlur={() => setTimeout(() => setOpen(false), 150)}
           placeholder="اكتب اسم مقالة..."
           className="w-full rounded-xl bg-brand-cream px-3 py-2 font-body text-sm text-brand-navy outline-none focus:ring-2 focus:ring-brand-orange"
         />
