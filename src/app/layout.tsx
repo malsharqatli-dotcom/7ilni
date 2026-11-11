@@ -18,16 +18,18 @@ const notoKufi = Noto_Kufi_Arabic({
 export const metadata: Metadata = {
   title: "حلّني | 7ilni",
   description: "سباق ويكيبيديا — اوصل من مقالة لمقالة قبل أصحابك!",
-  // Served as a plain /public file (not Next's app/icon.png convention) —
+  // Served as plain /public files (not Next's app/icon.png convention) —
   // that convention's route got stuck serving a stale cached build on
-  // Vercel even after redeploys, so a brand-new filename forces a clean
-  // break instead of fighting that cache.
+  // Vercel even after redeploys. Kept at the conventional /favicon.ico
+  // path too (not just referenced via these <link> tags) since Chrome
+  // fetches that exact URL directly as a legacy fallback regardless of
+  // what the page's <link rel="icon"> tags say.
   icons: {
     icon: [
-      { url: "/favicon-v2.png", type: "image/png", sizes: "512x512" },
-      { url: "/favicon-v2.ico", sizes: "any" },
+      { url: "/favicon.png", type: "image/png", sizes: "512x512" },
+      { url: "/favicon.ico", sizes: "any" },
     ],
-    shortcut: "/favicon-v2.ico",
+    shortcut: "/favicon.ico",
   },
 };
 
