@@ -18,6 +18,17 @@ const notoKufi = Noto_Kufi_Arabic({
 export const metadata: Metadata = {
   title: "حلّني | 7ilni",
   description: "سباق ويكيبيديا — اوصل من مقالة لمقالة قبل أصحابك!",
+  // Served as a plain /public file (not Next's app/icon.png convention) —
+  // that convention's route got stuck serving a stale cached build on
+  // Vercel even after redeploys, so a brand-new filename forces a clean
+  // break instead of fighting that cache.
+  icons: {
+    icon: [
+      { url: "/favicon-v2.png", type: "image/png", sizes: "512x512" },
+      { url: "/favicon-v2.ico", sizes: "any" },
+    ],
+    shortcut: "/favicon-v2.ico",
+  },
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
