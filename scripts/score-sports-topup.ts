@@ -4,7 +4,7 @@
 // in the easy tier and give that specific combo real breathing room.
 import { writeFileSync } from "node:fs";
 
-const USER_AGENT = "7ilni/1.0 (malsharqatli@gmail.com) Node.js";
+const USER_AGENT = "7ilni/1.0 (7ilni.app@gmail.com) Node.js";
 const BYTES_PER_WORD = 8;
 
 const CANDIDATES = [

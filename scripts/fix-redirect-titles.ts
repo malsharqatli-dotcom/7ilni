@@ -7,7 +7,7 @@
 // and what in-article links actually point to).
 import { writeFileSync, readFileSync } from "node:fs";
 
-const USER_AGENT = "7ilni/1.0 (malsharqatli@gmail.com) Node.js";
+const USER_AGENT = "7ilni/1.0 (7ilni.app@gmail.com) Node.js";
 const BYTES_PER_WORD = 8;
 const OUTPUT_PATH = "supabase/seed/0004_article_metadata_batch2.sql";
 

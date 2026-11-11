@@ -7,7 +7,7 @@
 // refreshes that row instead of duplicating it.
 import { writeFileSync } from "node:fs";
 
-const USER_AGENT = "7ilni/1.0 (malsharqatli@gmail.com) Node.js";
+const USER_AGENT = "7ilni/1.0 (7ilni.app@gmail.com) Node.js";
 const BATCH_SIZE = 10;
 const DELAY_MS = 3000;
 const RETRY_DELAY_MS = 15000;
