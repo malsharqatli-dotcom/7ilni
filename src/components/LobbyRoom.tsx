@@ -1,6 +1,7 @@
 "use client";
 
 import Image from "next/image";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { RealtimeChannel } from "@supabase/supabase-js";
@@ -366,13 +367,22 @@ export default function LobbyRoom({ lobbyId, joinCode, maxPlayers }: LobbyRoomPr
             <p className="font-body text-xs font-semibold text-brand-navy/60">كود الغرفة</p>
             <p className="font-display text-3xl tracking-widest text-brand-navy">{joinCode}</p>
           </div>
-          <button
-            type="button"
-            onClick={() => navigator.clipboard.writeText(joinCode)}
-            className="rounded-xl bg-white px-4 py-2 font-display text-base text-brand-navy shadow-sm"
-          >
-            ادعُ أصحابك
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => navigator.clipboard.writeText(joinCode)}
+              className="rounded-xl bg-white px-4 py-2 font-display text-base text-brand-navy shadow-sm"
+            >
+              ادعُ أصحابك
+            </button>
+            <Link
+              href="/how-to-play?tab=invite"
+              title="كيف تدعو أصحابك؟"
+              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white font-display text-lg text-brand-navy shadow-sm"
+            >
+              ؟
+            </Link>
+          </div>
         </div>
 
         <div className="brand-card rounded-3xl bg-white p-5 shadow-md">

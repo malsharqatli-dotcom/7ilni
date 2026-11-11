@@ -28,6 +28,10 @@ export default function Home() {
           🔥 تحدي اليوم
         </Link>
 
+        <Link href="/how-to-play" className="mt-4 font-body text-sm font-semibold text-brand-navy/70 underline underline-offset-2">
+          مش عارف تلعب؟ شوف التعليمات
+        </Link>
+
         <p className="mt-6 font-body text-sm text-brand-navy/70">
           عندك حساب؟{" "}
           <Link href="/login" className="font-bold underline underline-offset-2">
