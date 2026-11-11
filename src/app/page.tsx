@@ -6,14 +6,16 @@ export default function Home() {
   return (
     <div className="brand-bg flex min-h-screen flex-1 flex-col items-center justify-center px-4 py-10">
       <div className="flex w-full max-w-md flex-col items-center text-center">
-        <Image
-          src="/logo.png"
-          alt="حلّني"
-          width={1536}
-          height={1024}
-          priority
-          className="h-auto w-72 max-w-full"
-        />
+        <Link href="/">
+          <Image
+            src="/logo.png"
+            alt="حلّني"
+            width={1536}
+            height={1024}
+            priority
+            className="h-auto w-72 max-w-full"
+          />
+        </Link>
 
         <p className="mt-3 font-body text-lg font-semibold text-brand-navy/80">
           سباق المقالات — اوصل قبل أصحابك!

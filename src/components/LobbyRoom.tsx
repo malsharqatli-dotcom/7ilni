@@ -360,7 +360,9 @@ export default function LobbyRoom({ lobbyId, joinCode, maxPlayers }: LobbyRoomPr
   return (
     <div className="brand-bg flex min-h-screen flex-1 flex-col items-center px-4 py-8">
       <div className="flex w-full max-w-md flex-col gap-5">
-        <Image src="/logo.png" alt="حلّني" width={1536} height={1024} className="h-auto w-32 max-w-full self-center" />
+        <Link href="/" className="self-center">
+          <Image src="/logo.png" alt="حلّني" width={1536} height={1024} className="h-auto w-32 max-w-full" />
+        </Link>
 
         <div className="flex items-center justify-between">
           <div>
