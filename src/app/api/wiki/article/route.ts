@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { ArticleNotFoundError, RateLimitedError, getArticle } from "@/lib/wiki/fetch-article";
+import { ArticleNotFoundError, RateLimitedError, getArticle, prefetchLinkedArticles } from "@/lib/wiki/fetch-article";
 
 export async function GET(request: NextRequest) {
   const title = request.nextUrl.searchParams.get("title");
@@ -9,6 +9,7 @@ export async function GET(request: NextRequest) {
 
   try {
     const article = await getArticle(title);
+    prefetchLinkedArticles(article.html);
     return NextResponse.json(article);
   } catch (error) {
     if (error instanceof ArticleNotFoundError) {

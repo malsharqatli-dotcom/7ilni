@@ -1,5 +1,15 @@
+import { after } from "next/server";
+import * as cheerio from "cheerio";
 import { supabase } from "@/lib/supabase/client";
 import { sanitizeArticleHtml, type SanitizedArticle } from "./sanitize-html";
+
+// How many of the current article's legit hop targets to warm the cache
+// for in the background. Players only ever click one, but we don't know
+// which — this is the real lever against "lag between pages": by the
+// time someone decides which link to click, there's a decent chance it's
+// already cached from the moment the current article rendered, instead
+// of only ever caching on-demand, one cold Wikipedia fetch at a time.
+const MAX_PREFETCH_LINKS = 12;
 
 // Wikimedia's API Usage Guidelines require a descriptive User-Agent with
 // real contact info, or requests get capped much harder (10 req/min vs 200).
@@ -42,18 +52,28 @@ async function getCachedArticle(title: string): Promise<SanitizedArticle | null>
   return article;
 }
 
-async function storeCachedArticle(requestedTitle: string, article: SanitizedArticle, revisionId: number) {
+function storeCachedArticle(requestedTitle: string, article: SanitizedArticle, revisionId: number) {
   memoryCache.set(requestedTitle.toLowerCase(), article);
   memoryCache.set(article.title.toLowerCase(), article);
 
-  await supabase.from("cached_articles").upsert(
-    {
-      title: article.title,
-      revision_id: revisionId,
-      sanitized_html: article.html,
-    },
-    { onConflict: "title,revision_id" },
-  );
+  // Deliberately scheduled with after(), not awaited: this write only
+  // benefits *future* requests, not the one currently waiting on
+  // getArticle() to return, so it shouldn't sit on the critical path — a
+  // cold-cache-miss response was taking an extra DB round trip for no
+  // reason the player ever felt. after() (rather than a bare un-awaited
+  // promise) keeps it running on serverless, where the runtime can freeze
+  // the function right after the response is sent.
+  after(async () => {
+    const { error } = await supabase.from("cached_articles").upsert(
+      {
+        title: article.title,
+        revision_id: revisionId,
+        sanitized_html: article.html,
+      },
+      { onConflict: "title,revision_id" },
+    );
+    if (error) console.error(`Failed to cache "${article.title}":`, error.message);
+  });
 }
 
 function sleep(ms: number) {
@@ -92,6 +112,25 @@ export async function getArticle(title: string): Promise<SanitizedArticle> {
   const rawHtml = await response.text();
   const article = sanitizeArticleHtml(rawHtml, title);
 
-  await storeCachedArticle(title, article, revisionId);
+  storeCachedArticle(title, article, revisionId);
   return article;
+}
+
+// Call once per page view, after getArticle() returns, with that
+// article's own html. getArticle() already checks the cache first, so
+// prefetching a title that's already warm just costs a cheap lookup, not
+// a redundant Wikipedia fetch — safe to call broadly without tracking
+// what's already cached here.
+export function prefetchLinkedArticles(html: string) {
+  const $ = cheerio.load(html);
+  const titles = new Set<string>();
+  $("[data-wiki-title]").each((_, el) => {
+    if (titles.size >= MAX_PREFETCH_LINKS) return false;
+    const title = $(el).attr("data-wiki-title");
+    if (title) titles.add(title);
+  });
+
+  for (const title of titles) {
+    after(() => getArticle(title).catch(() => {}));
+  }
 }

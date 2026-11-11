@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import ArticleView from "@/components/ArticleView";
-import { ArticleNotFoundError, RateLimitedError, getArticle } from "@/lib/wiki/fetch-article";
+import { ArticleNotFoundError, RateLimitedError, getArticle, prefetchLinkedArticles } from "@/lib/wiki/fetch-article";
 
 export default async function ArticlePage(props: PageProps<"/article/[title]">) {
   const { title } = await props.params;
@@ -20,6 +20,8 @@ export default async function ArticlePage(props: PageProps<"/article/[title]">) 
     }
     throw error;
   }
+
+  prefetchLinkedArticles(article.html);
 
   return (
     <div className="brand-bg min-h-screen px-4 py-8">

@@ -285,7 +285,11 @@ export default function RaceView({
   }
 
   async function handleLinkClick(toTitle: string) {
-    if (loading || finished) return;
+    // raceOver, not just finished: once anyone (or any team) has won, the
+    // race is over for everyone — someone who hasn't personally finished
+    // yet shouldn't still be able to keep hopping while the winner
+    // overlay is covering their screen.
+    if (loading || finished || raceOver) return;
 
     const fromTitle = currentTitle;
     setLoading(true);
@@ -302,6 +306,20 @@ export default function RaceView({
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Failed to record hop");
+
+      // Update my own row in local state immediately rather than waiting
+      // on realtime or the next poll tick — both are confirmed to work,
+      // but a flaky mobile websocket (or just the 3s poll interval) can
+      // make my own hop count look frozen for a few seconds after every
+      // single click, which reads as "it's just not working" even though
+      // it eventually catches up. This makes my own counter never lag.
+      setParticipants((prev) =>
+        prev.map((p) =>
+          p.user_id === myUserId
+            ? { ...p, hop_count: data.hopCount, current_title: data.stageAdvanced ? data.nextStageStart : toTitle }
+            : p,
+        ),
+      );
 
       if (data.stageAdvanced) {
         lastSyncedStageRef.current = data.nextStageIndex;
@@ -335,9 +353,53 @@ export default function RaceView({
 
   const minutes = String(Math.floor(elapsed / 60)).padStart(2, "0");
   const seconds = String(elapsed % 60).padStart(2, "0");
+  const iWon = finished && finishRank === 1;
+  const resultHeadline = iWon ? (isTeamsMode ? "🎉 فريقك فاز!" : "🎉 فزت!") : `🏆 فاز ${winnerName}!`;
 
   return (
     <div className="brand-bg min-h-screen px-4 py-6">
+      {raceOver && (
+        // Forced, full-screen: once a winner is decided the race is over
+        // for everyone, not just whoever finished — this covers the
+        // article so nobody can keep clicking around while it's showing,
+        // and everyone sees the same result + path at the same time,
+        // before the shared auto-redirect to the lobby.
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-brand-navy/80 px-4 backdrop-blur-sm">
+          <div className="w-full max-w-lg overflow-hidden rounded-3xl bg-white text-center shadow-2xl">
+            <div className="btn-primary px-6 py-8">
+              <p className="font-display text-3xl text-white">{resultHeadline}</p>
+              {!isTeamsMode && iWon && <p className="mt-1 font-body text-white/90">ترتيبك: {finishRank}</p>}
+            </div>
+            <div className="p-6">
+              {winnerPath && (
+                <>
+                  <h3 className="mb-3 font-display text-base text-brand-navy">مسار الفوز</h3>
+                  <div dir="ltr" className="flex flex-wrap items-center justify-center gap-2">
+                    {winnerPath.map((title, i) => (
+                      <span key={i} className="flex items-center gap-2">
+                        <span
+                          className={`rounded-full px-3 py-1 font-body text-sm ${
+                            i === winnerPath.length - 1
+                              ? "btn-primary text-white"
+                              : i === 0
+                                ? "bg-brand-navy text-white"
+                                : "bg-brand-cream text-brand-navy"
+                          }`}
+                        >
+                          {title}
+                        </span>
+                        {i < winnerPath.length - 1 && <span className="text-brand-navy/40">→</span>}
+                      </span>
+                    ))}
+                  </div>
+                </>
+              )}
+              <p className="mt-4 font-body text-sm text-brand-navy/50">جاري الرجوع للغرفة...</p>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="mx-auto flex max-w-5xl flex-col gap-4 lg:flex-row">
         <div className="flex-1">
           <div className="brand-card mb-4 flex items-center justify-between rounded-2xl bg-white px-5 py-3 shadow-md">
@@ -353,46 +415,6 @@ export default function RaceView({
               الهدف: <span className="font-bold text-brand-orange">{currentDestination}</span>
             </span>
           </div>
-
-          {finished && (
-            <div className="btn-primary mb-4 animate-bounce rounded-2xl px-5 py-4 text-center font-display text-2xl text-white shadow-md">
-              🎉 {isTeamsMode ? `فريقك وصل! الترتيب: ${finishRank}` : `وصلت! ترتيبك: ${finishRank}`}
-              {raceOver && (
-                <p className="mt-1 font-body text-sm font-normal opacity-90">جاري الرجوع للغرفة...</p>
-              )}
-            </div>
-          )}
-
-          {raceOver && !finished && (
-            <div className="mb-4 rounded-2xl bg-brand-navy px-5 py-4 text-center font-display text-2xl text-white shadow-md">
-              🏆 فاز {winnerName}!
-              <p className="mt-1 font-body text-sm font-normal opacity-90">جاري الرجوع للغرفة...</p>
-            </div>
-          )}
-
-          {raceOver && winnerPath && (
-            <div className="brand-card mb-4 rounded-2xl bg-white p-4 shadow-md">
-              <h3 className="mb-2 font-display text-base text-brand-navy">مسار الفوز</h3>
-              <div dir="ltr" className="flex flex-wrap items-center gap-2">
-                {winnerPath.map((title, i) => (
-                  <span key={i} className="flex items-center gap-2">
-                    <span
-                      className={`rounded-full px-3 py-1 font-body text-sm ${
-                        i === winnerPath.length - 1
-                          ? "btn-primary text-white"
-                          : i === 0
-                            ? "bg-brand-navy text-white"
-                            : "bg-brand-cream text-brand-navy"
-                      }`}
-                    >
-                      {title}
-                    </span>
-                    {i < winnerPath.length - 1 && <span className="text-brand-navy/40">→</span>}
-                  </span>
-                ))}
-              </div>
-            </div>
-          )}
 
           {error && <p className="mb-3 font-body text-sm text-red-600">{error}</p>}
 
