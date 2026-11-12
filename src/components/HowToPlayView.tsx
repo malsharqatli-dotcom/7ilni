@@ -40,10 +40,16 @@ export default function HowToPlayView() {
   const initialTab = searchParams.get("tab");
   const [tab, setTab] = useState<Tab>(isTab(initialTab) ? initialTab : "play");
 
+  // If we got here from a room someone already created (the lobby's help
+  // icon passes its join code along), send them back to that same room
+  // instead of home — home just makes them create a brand new one.
+  const fromJoinCode = searchParams.get("from");
+  const backHref = fromJoinCode ? `/lobby/${fromJoinCode}` : "/";
+
   return (
     <div className="brand-bg flex min-h-screen flex-1 flex-col items-center px-4 py-8">
       <div className="flex w-full max-w-md flex-col gap-5">
-        <Link href="/" className="self-center">
+        <Link href={backHref} className="self-center">
           <Image src="/logo.png" alt="حلّني" width={1536} height={1024} className="h-auto w-28 max-w-full" />
         </Link>
 
@@ -78,7 +84,7 @@ export default function HowToPlayView() {
         </div>
 
         <Link
-          href="/"
+          href={backHref}
           className="btn-primary w-full rounded-xl py-3 text-center font-display text-xl text-white shadow-md transition hover:brightness-110 active:scale-[0.99]"
         >
           يلا نلعب!

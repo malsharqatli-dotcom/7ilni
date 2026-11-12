@@ -378,7 +378,7 @@ export default function LobbyRoom({ lobbyId, joinCode, maxPlayers }: LobbyRoomPr
               ادعُ أصحابك
             </button>
             <Link
-              href="/how-to-play?tab=invite"
+              href={`/how-to-play?tab=invite&from=${joinCode}`}
               title="كيف تدعو أصحابك؟"
               className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white font-display text-lg text-brand-navy shadow-sm"
             >
